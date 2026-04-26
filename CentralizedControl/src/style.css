@@ -1,0 +1,187 @@
+@font-face {
+  font-family: 'LINE Seed KR';
+  src: url('./styles/LINE_SeedKR_2023.09.06/Web/woff2/LINESeedKR-Rg.woff2') format('woff2'),
+       url('./styles/LINE_SeedKR_2023.09.06/Web/woff/LINESeedKR-Rg.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'LINE Seed KR';
+  src: url('./styles/LINE_SeedKR_2023.09.06/Web/woff2/LINESeedKR-Bd.woff2') format('woff2'),
+       url('./styles/LINE_SeedKR_2023.09.06/Web/woff/LINESeedKR-Bd.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'HarmonyOS Sans TC';
+  src: url('./styles/HarmonyOS_SansSC_Light.woff') format('woff');
+  font-weight: 300;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'HarmonyOS Sans TC';
+  src: url('./styles/HarmonyOS_SansSC_Light.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'HarmonyOS Sans TC';
+  src: url('./styles/HarmonyOS_SansSC_Light.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: 'Clear Sans';
+  src: url('./styles/clear-sans-maisfontes.f9e6/clear-sans.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+}
+
+:root {
+  --fui-background: #faf9f8;
+  --fui-surface: #ffffff;
+  --fui-primary: #0078d4;
+  --fui-primary-hover: #106ebe;
+  --fui-border: #e1dfdd;
+  --fui-text: #323130;
+  --fui-text-secondary: #605e5c;
+  --fui-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  --fui-radius: 4px;
+  --fui-icon-size: 18px;
+  
+  /* Aero Glass 效果变量 */
+  --aero-glass-bg: rgba(255, 255, 255, 0.85);
+  --aero-glass-border: rgba(255, 255, 255, 0.5);
+  --aero-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --aero-blur-amount: 20px;
+  --aero-glass-radius: 12px;
+}
+
+[data-theme='dark'] {
+  --fui-background: #1a1a1a;
+  --fui-surface: #2d2d2d;
+  --fui-primary: #0078d4;
+  --fui-primary-hover: #106ebe;
+  --fui-border: #404040;
+  --fui-text: #ffffff;
+  --fui-text-secondary: #b0b0b0;
+  --fui-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  --fui-radius: 4px;
+  
+  /* Aero Glass 暗色主题变量 */
+  --aero-glass-bg: rgba(45, 45, 45, 0.85);
+  --aero-glass-border: rgba(255, 255, 255, 0.2);
+  --aero-glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+:root {
+  --card-bg: #ffffff;
+  --input-bg: #f5f5f5;
+  --text-primary: #323130;
+  --text-secondary: #605e5c;
+  --border-color: #e1dfdd;
+  --primary-color: #0078d4;
+}
+
+[data-theme='dark'] {
+  --card-bg: #2d2d2d;
+  --input-bg: #3d3d3d;
+  --text-primary: #ffffff;
+  --text-secondary: #b0b0b0;
+  --border-color: #404040;
+  --primary-color: #0078d4;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'LINE Seed KR', 'Clear Sans', 'HarmonyOS Sans TC', 'Segoe UI', 'Segoe UI Web (West European)', -apple-system, BlinkMacSystemFont, Roboto, 'Helvetica Neue', sans-serif;
+  background-color: var(--fui-background);
+  color: var(--fui-text);
+  line-height: 1.5;
+  font-size: var(--fui-font-size-base);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#app {
+  width: 100%;
+  height: 100vh;
+  font-size: var(--fui-font-size-base);
+  font-family: inherit;
+}
+
+.page-container {
+  font-size: var(--fui-font-size-base);
+  font-family: inherit;
+}
+
+.fluent-container {
+  padding: 20px;
+  max-width: 1400px;
+  margin: 0 auto;
+  font-size: var(--fui-font-size-base);
+  font-family: inherit;
+}
+
+* {
+  font-family: inherit;
+}
+
+h1, h2, h3, h4, h5, h6, p, span, div, label, input, textarea, select, button, a, li, td, th {
+  font-family: inherit;
+}
+
+.card {
+  background: var(--fui-surface);
+  border-radius: var(--fui-radius);
+  box-shadow: var(--fui-shadow);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.button-primary {
+  background-color: #0078d4;
+  color: white;
+  border: none;
+  padding: 10px 18px;
+  border-radius: var(--fui-radius);
+  cursor: pointer;
+  font-size: var(--fui-font-size-medium);
+  transition: all 0.2s ease;
+}
+
+.button-primary:hover {
+  background-color: #106ebe;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 120, 212, 0.25);
+}
+
+.button-primary:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.input-field {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--fui-border);
+  border-radius: var(--fui-radius);
+  font-size: var(--fui-font-size-medium);
+  font-family: inherit;
+  margin-bottom: 12px;
+}
+
+.input-field:focus {
+  outline: 2px solid var(--fui-primary);
+  border-color: transparent;
+}
