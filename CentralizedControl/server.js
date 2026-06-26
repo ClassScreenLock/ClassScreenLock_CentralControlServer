@@ -26,6 +26,20 @@ app.use((req, res, next) => {
   next();
 });
 
+// ========== WebSocket 代理到 Python 后端 ==========
+// WebSocket 连接代理（Socket.IO）
+const wsProxy = createProxyMiddleware({
+  target: `http://localhost:${BACKEND_PORT}`,
+  changeOrigin: true,
+  ws: true,  // 启用 WebSocket 代理
+  pathRewrite: {
+    '^/socket.io': '/socket.io'  // Socket.IO 路径
+  }
+});
+
+// 代理 Socket.IO WebSocket 连接
+app.use('/socket.io', wsProxy);
+
 // ========== API 代理到 Python 后端 ==========
 
 // 通用代理函数
@@ -67,14 +81,14 @@ app.use('/api', proxyRequest);
 
 // 开发模式：代理前端请求到 Vite 服务器
 if (process.env.NODE_ENV !== 'production') {
-  // 创建代理实例（只创建一次）- 使用 filter 选项跳过 API 请求
+  // 创建代理实例（只创建一次）- 使用 filter 选项跳过 API 和 WebSocket 请求
   const viteProxy = createProxyMiddleware({
     target: `http://localhost:${VITE_PORT}`,
     changeOrigin: true,
     ws: true,
     filter: (req) => {
-      // 跳过所有 /api/ 请求
-      return !req.url.startsWith('/api/');
+      // 跳过所有 /api/ 和 /socket.io 请求
+      return !req.url.startsWith('/api/') && !req.url.startsWith('/socket.io');
     }
   });
   
@@ -89,14 +103,25 @@ if (process.env.NODE_ENV !== 'production') {
 // ========== 启动服务器 ==========
 
 async function startServer() {
-  app.listen(PORT, () => {
+  // 监听所有网络接口（0.0.0.0），允许局域网访问
+  const server = app.listen(PORT, '0.0.0.0', () => {
     console.log('='.repeat(50));
     console.log('ClassScreenLock Control Center API Server');
     console.log('='.repeat(50));
     console.log(`服务器地址：http://localhost:${PORT}`);
+    console.log(`局域网访问：http://<本机IP>:${PORT}`);
     console.log(`前端代理：http://localhost:${VITE_PORT}`);
     console.log(`后端代理：http://localhost:${BACKEND_PORT}`);
+    console.log(`WebSocket：ws://localhost:${PORT}/socket.io`);
     console.log('='.repeat(50));
+  });
+  
+  // 处理 WebSocket 连接升级
+  server.on('upgrade', (req, socket, head) => {
+    if (req.url.startsWith('/socket.io')) {
+      console.log('[WebSocket] 连接升级请求:', req.url);
+      wsProxy.upgrade(req, socket, head);
+    }
   });
 }
 

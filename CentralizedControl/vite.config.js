@@ -10,6 +10,20 @@ export default defineConfig({
     }
   },
   server: {
-    port: 5174
+    port: 5174,
+    host: '0.0.0.0',  // 允许局域网访问
+    proxy: {
+      // WebSocket 代理
+      '/socket.io': {
+        target: 'http://localhost:5000',
+        ws: true,
+        changeOrigin: true
+      },
+      // HTTP API 代理
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      }
+    }
   }
 })

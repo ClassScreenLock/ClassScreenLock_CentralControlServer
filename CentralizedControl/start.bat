@@ -69,7 +69,7 @@ echo ================================================
 echo.
 
 :: Start backend
-echo [1/2] Starting Python backend...
+echo [1/2] Starting Python backend (HTTP + WebSocket)...
 start "ClassScreenLock Backend" cmd /k "cd backend && python app.py"
 
 :: Wait for backend
@@ -87,6 +87,7 @@ echo ================================================
 echo.
 echo Frontend: http://localhost:5173
 echo Backend: http://localhost:5000
+echo WebSocket: ws://localhost:5000 (Real-time communication)
 echo.
 echo Default credentials:
 echo   Username: admin
