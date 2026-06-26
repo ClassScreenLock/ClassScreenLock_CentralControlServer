@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 from models.account import AccountModel
 from models.organization import OrganizationModel
 from models.device import DeviceModel
+from models.device_software import DeviceSoftwareModel
 from models.permission import PermissionModel
 from models.activity_log import ActivityLogModel
 
@@ -16,6 +17,7 @@ class Database:
         self.accounts = AccountModel(self)
         self.organizations = OrganizationModel(self)
         self.devices = DeviceModel(self)
+        self.device_software = DeviceSoftwareModel(self)
         self.permissions = PermissionModel(self)
         self.activity_logs = ActivityLogModel(self)
         self.init_database()
@@ -121,6 +123,7 @@ class Database:
 
             self.permissions.init_table()
             self.activity_logs.init_table()
+            self.device_software.init_table()
 
             conn.commit()
 

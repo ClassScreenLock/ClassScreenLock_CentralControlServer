@@ -1,6 +1,8 @@
 from flask import Blueprint, request, jsonify
 from utils.converters import convert_organization_fields, convert_device_fields
 from middleware.permissions import require_action_permission
+import json
+import base64
 
 
 def create_organizations_routes(db, token_required):
@@ -278,5 +280,43 @@ def create_organizations_routes(db, token_required):
         db.organizations.save_config(org_id, security_config, network_config)
         updated_config = db.organizations.get_config(org_id)
         return jsonify(updated_config.get('network_config', {}))
+
+    @orgs_bp.route('/<org_id>/export-config', methods=['GET'])
+    @token_required
+    def export_organization_config(user, org_id):
+        organization = db.organizations.get_by_id(org_id)
+        if not organization:
+            return jsonify({'error': 'Organization not found'}), 404
+
+        host = request.host.split(':')[0]
+        port = request.host.split(':')[1] if ':' in request.host else '5000'
+        server_url = f"http://{host}:{port}"
+
+        config_data = {
+            'version': '1.0',
+            'type': 'ClassScreenLock.OrganizationConfig',
+            'organization': {
+                'id': org_id,
+                'name': organization.get('name', ''),
+                'description': organization.get('description', '')
+            },
+            'server': {
+                'url': server_url,
+                'host': host,
+                'port': int(port)
+            },
+            'exportedAt': __import__('datetime').datetime.now().isoformat(),
+            'exportedBy': user.get('username', 'unknown')
+        }
+
+        config_json = json.dumps(config_data, ensure_ascii=False, indent=2)
+        config_base64 = base64.b64encode(config_json.encode('utf-8')).decode('utf-8')
+
+        return jsonify({
+            'success': True,
+            'config': config_data,
+            'configBase64': config_base64,
+            'filename': f"org_{organization.get('name', 'config')}_{org_id[:8]}.cslcfg"
+        })
 
     return orgs_bp

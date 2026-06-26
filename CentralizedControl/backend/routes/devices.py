@@ -7,6 +7,135 @@ from middleware.permissions import require_action_permission
 def create_devices_routes(db, token_required):
     devices_bp = Blueprint('devices', __name__, url_prefix='/api/devices')
 
+    # ========== WebSocket相关API端点 ==========
+    
+    @devices_bp.route('/ws/register', methods=['POST'])
+    def ws_device_register():
+        """WebSocket设备注册"""
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        device_id = data.get('deviceId')
+        organization_id = data.get('organizationId')
+        device_name = data.get('deviceName')
+        ip_address = data.get('ipAddress')
+        mac_address = data.get('macAddress')
+        
+        if not device_id or not organization_id:
+            return jsonify({'error': 'deviceId and organizationId are required'}), 400
+        
+        now = datetime.now().isoformat()
+        
+        # 检查设备是否已存在
+        existing_device = db.devices.get_by_id(device_id)
+        
+        if existing_device:
+            # 更新设备状态为在线
+            db.devices.update(
+                device_id,
+                status='online',
+                last_seen=now,
+                last_heartbeat=now,
+                offline_reason=None,
+                exit_time=None
+            )
+        else:
+            # 创建新设备
+            db.devices.create(
+                name=device_name or f'Device-{device_id[:8]}',
+                ip_address=ip_address or '127.0.0.1',
+                organization_id=organization_id,
+                mac_address=mac_address,
+                status='online',
+                last_seen=now,
+                last_heartbeat=now
+            )
+        
+        return jsonify({
+            'message': 'Device registered successfully',
+            'deviceId': device_id,
+            'status': 'online',
+            'timestamp': now
+        })
+    
+    @devices_bp.route('/ws/heartbeat', methods=['POST'])
+    def ws_device_heartbeat():
+        """WebSocket设备心跳"""
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        device_id = data.get('deviceId')
+        
+        if not device_id:
+            return jsonify({'error': 'deviceId is required'}), 400
+        
+        now = datetime.now().isoformat()
+        
+        # 更新心跳数据
+        heartbeat_data = {
+            'status': 'online',
+            'cpu_usage': data.get('cpuUsage', 0),
+            'memory_usage': data.get('memoryUsage', 0),
+            'disk_usage': data.get('diskUsage', 0),
+            'last_heartbeat': now,
+            'last_seen': now,
+            'offline_reason': None,
+            'exit_time': None
+        }
+        
+        if db.devices.update(device_id, **heartbeat_data):
+            # 检查是否有配置更新（简化实现）
+            device = db.devices.get_by_id(device_id)
+            config_updated = False
+            
+            if device and device.get('organization_id'):
+                # 可以实现配置版本检查逻辑
+                config_updated = False
+            
+            return jsonify({
+                'message': 'Heartbeat received',
+                'deviceId': device_id,
+                'timestamp': now,
+                'configUpdated': config_updated
+            })
+        else:
+            return jsonify({'error': 'Device not found'}), 404
+    
+    @devices_bp.route('/ws/offline', methods=['POST'])
+    def ws_device_offline():
+        """WebSocket设备离线通知"""
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+        
+        device_id = data.get('deviceId')
+        reason = data.get('reason', 'unknown')
+        
+        if not device_id:
+            return jsonify({'error': 'deviceId is required'}), 400
+        
+        now = datetime.now().isoformat()
+        
+        offline_data = {
+            'status': 'offline',
+            'offline_reason': reason,
+            'exit_time': now
+        }
+        
+        if db.devices.update(device_id, **offline_data):
+            return jsonify({
+                'message': 'Device offline notification received',
+                'deviceId': device_id,
+                'reason': reason,
+                'timestamp': now
+            })
+        else:
+            return jsonify({'error': 'Device not found'}), 404
+
+    # ========== HTTP API端点 ==========
+
     @devices_bp.route('', methods=['GET'])
     @token_required
     def get_devices(user):
@@ -192,5 +321,66 @@ def create_devices_routes(db, token_required):
             'mode': 'blacklist',
             'domainRules': []
         })
+
+    @devices_bp.route('/<path:device_id>/software', methods=['GET'])
+    @token_required
+    @require_action_permission(db, 'device', 'viewSoftware')
+    def get_device_software(user, device_id):
+        device = db.devices.get_by_id(device_id)
+        if not device:
+            return jsonify({'error': 'Device not found'}), 404
+
+        include_system = request.args.get('includeSystem', 'true').lower() == 'true'
+        search_query = request.args.get('search', '').strip()
+
+        if search_query:
+            software_list = db.device_software.search_software(device_id, search_query)
+        else:
+            software_list = db.device_software.get_software_by_device(device_id, include_system)
+
+        result = []
+        for sw in software_list:
+            result.append({
+                'id': sw['id'],
+                'name': sw['name'],
+                'publisher': sw['publisher'],
+                'version': sw['version'],
+                'installDate': sw['install_date'],
+                'installLocation': sw['install_location'],
+                'estimatedSize': sw['estimated_size'],
+                'uninstallString': sw['uninstall_string'],
+                'isSystemSoftware': bool(sw['is_system_software']),
+                'lastUpdated': sw['last_updated']
+            })
+
+        return jsonify({
+            'deviceId': device_id,
+            'totalCount': len(result),
+            'software': result
+        })
+
+    @devices_bp.route('/<path:device_id>/software', methods=['POST'])
+    def upload_device_software(device_id):
+        device = db.devices.get_by_id(device_id)
+        if not device:
+            return jsonify({'error': 'Device not found'}), 404
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+
+        software_list = data.get('software', [])
+        if not isinstance(software_list, list):
+            return jsonify({'error': 'Software must be a list'}), 400
+
+        try:
+            db.device_software.upsert_software_list(device_id, software_list)
+            return jsonify({
+                'message': 'Software list updated successfully',
+                'deviceId': device_id,
+                'count': len(software_list)
+            })
+        except Exception as e:
+            return jsonify({'error': f'Failed to update software list: {str(e)}'}), 500
 
     return devices_bp

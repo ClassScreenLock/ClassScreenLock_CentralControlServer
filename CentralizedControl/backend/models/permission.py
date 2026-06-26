@@ -23,6 +23,33 @@ class PermissionModel:
             conn.commit()
             
             self._migrate_system_logs_permission(conn)
+            self._migrate_view_software_permission(conn)
+    
+    def _migrate_view_software_permission(self, conn) -> None:
+        import json
+        cursor = conn.cursor()
+        cursor.execute('SELECT role, action_permissions FROM role_permissions')
+        rows = cursor.fetchall()
+        
+        for row in rows:
+            role = row['role']
+            action_perms = json.loads(row['action_permissions']) if row['action_permissions'] else self.get_default_action_permissions()
+            
+            needs_update = False
+            
+            if 'device' in action_perms and 'viewSoftware' not in action_perms['device']:
+                action_perms['device']['viewSoftware'] = True
+                needs_update = True
+            
+            if needs_update:
+                action_json = json.dumps(action_perms, ensure_ascii=False)
+                cursor.execute('''
+                    UPDATE role_permissions 
+                    SET action_permissions = ?, updated_at = CURRENT_TIMESTAMP 
+                    WHERE role = ?
+                ''', (action_json, role))
+        
+        conn.commit()
     
     def _migrate_system_logs_permission(self, conn) -> None:
         import json
@@ -84,6 +111,7 @@ class PermissionModel:
             },
             'device': {
                 'viewDetail': True,
+                'viewSoftware': True,
                 'delete': True
             },
             'account': {
