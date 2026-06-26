@@ -97,11 +97,19 @@
                   {{ formatStatus(device.status) }}
                 </div>
               </td>
-              <td class="time-cell">{{ formatDate(device.lastHeartbeat || device.lastSeen, true) }}</td>
+              <td class="time-cell">{{ device.status === 'online' ? '刚刚' : formatDate(device.lastHeartbeat || device.lastSeen, true) }}</td>
               <td>
                 <div class="action-buttons">
                   <button class="button-icon" @click="viewDevice(device)" title="查看详情" :disabled="!devicePermissions.viewDetail">
                     <FluentIcons name="view" :size="18" />
+                  </button>
+                  <button
+                    class="button-icon message-btn"
+                    @click="openSendMessageModal(device)"
+                    title="发送消息"
+                    :disabled="device.status !== 'online'"
+                  >
+                    <FluentIcons name="message" :size="18" />
                   </button>
                   <button class="button-icon delete-btn" @click="showDeleteConfirm(device)" title="删除设备" :disabled="!devicePermissions.delete">
                     <FluentIcons name="delete" :size="18" />
@@ -118,15 +126,37 @@
     <Transition name="modal-overlay" appear>
       <div v-if="selectedDevice" class="modal-overlay" @click="closeDeviceModal">
         <Transition name="modal-content" appear>
-          <div v-if="selectedDevice" class="modal-content" @click.stop>
+          <div v-if="selectedDevice" class="modal-content modal-content-large" @click.stop>
             <div class="modal-glass"></div>
             <div class="modal-refraction"></div>
             <div class="modal-header">
               <h3>设备详情</h3>
               <button class="close-btn" @click="closeDeviceModal">×</button>
             </div>
+            
+            <div class="modal-tabs">
+              <button 
+                class="tab-btn" 
+                :class="{ active: activeTab === 'info' }" 
+                @click="activeTab = 'info'"
+              >
+                <FluentIcons name="info" :size="16" />
+                基本信息
+              </button>
+              <button 
+                v-if="devicePermissions.viewSoftware"
+                class="tab-btn" 
+                :class="{ active: activeTab === 'software' }" 
+                @click="activeTab = 'software'; loadDeviceSoftware()"
+              >
+                <FluentIcons name="app_folder" :size="16" />
+                已安装软件
+                <span v-if="softwareCount > 0" class="software-count">{{ softwareCount }}</span>
+              </button>
+            </div>
+            
             <div class="modal-body">
-              <div class="device-detail">
+              <div v-if="activeTab === 'info'" class="device-detail">
                 <div class="detail-section">
                   <h4 class="section-title">基本信息</h4>
                   <div class="detail-row">
@@ -205,7 +235,7 @@
                   </div>
                   <div class="detail-row">
                     <strong>最后在线:</strong>
-                    <span>{{ formatDate(selectedDevice.lastHeartbeat || selectedDevice.lastSeen, true) }}</span>
+                    <span>{{ selectedDevice.status === 'online' ? '刚刚' : formatDate(selectedDevice.lastHeartbeat || selectedDevice.lastSeen, true) }}</span>
                   </div>
                   <div class="detail-row" v-if="selectedDevice.exitTime">
                     <strong>退出时间:</strong>
@@ -229,6 +259,67 @@
                   </div>
                 </div>
               </div>
+              
+              <div v-if="activeTab === 'software'" class="software-tab">
+                <div class="software-header">
+                  <div class="software-search">
+                    <input 
+                      v-model="softwareSearchQuery" 
+                      type="text" 
+                      placeholder="搜索软件名称或发布者..." 
+                      class="input-field"
+                      @input="filterSoftware"
+                    />
+                  </div>
+                  <div class="software-filters">
+                    <label class="filter-checkbox">
+                      <input type="checkbox" v-model="includeSystemSoftware" @change="loadDeviceSoftware" />
+                      <span>显示系统软件</span>
+                    </label>
+                  </div>
+                </div>
+                
+                <div v-if="loadingSoftware" class="software-loading">
+                  <FluentIcons name="sync" :size="24" class="spin-icon" />
+                  <span>正在加载软件列表...</span>
+                </div>
+                
+                <div v-else-if="filteredSoftware.length === 0" class="software-empty">
+                  <FluentIcons name="app_folder" :size="48" class="empty-icon" />
+                  <p v-if="softwareSearchQuery">未找到匹配的软件</p>
+                  <p v-else>暂无软件数据</p>
+                </div>
+                
+                <div v-else class="software-list">
+                  <div class="software-count-info">
+                    共 {{ filteredSoftware.length }} 个软件
+                    <span v-if="softwareSearchQuery">（搜索结果）</span>
+                  </div>
+                  <table class="software-table">
+                    <thead>
+                      <tr>
+                        <th>软件名称</th>
+                        <th>发布者</th>
+                        <th>版本</th>
+                        <th>安装日期</th>
+                        <th>大小</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr v-for="sw in filteredSoftware" :key="sw.id">
+                        <td class="software-name">
+                          <FluentIcons :name="sw.isSystemSoftware ? 'system' : 'app_default'" :size="16" class="software-icon" />
+                          {{ sw.name }}
+                        </td>
+                        <td>{{ sw.publisher || '-' }}</td>
+                        <td>{{ sw.version || '-' }}</td>
+                        <td>{{ sw.installDate || '-' }}</td>
+                        <td>{{ sw.estimatedSize || '-' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
             </div>
           </div>
         </Transition>
@@ -243,6 +334,155 @@
       @confirm="confirmDelete"
       @cancel="cancelDelete"
     />
+
+    <!-- 发送消息对话框 -->
+    <Transition name="modal-overlay" appear>
+      <div v-if="sendMessageVisible" class="modal-overlay" @click="closeSendMessageModal">
+        <Transition name="modal-content" appear>
+          <div v-if="sendMessageVisible" class="modal-content" @click.stop>
+            <div class="modal-glass"></div>
+            <div class="modal-refraction"></div>
+            <div class="modal-header">
+              <h3>发送消息到设备</h3>
+              <button class="close-btn" @click="closeSendMessageModal">×</button>
+            </div>
+            <div class="modal-body">
+              <div class="send-message-target">
+                <FluentIcons name="computer" :size="16" class="target-icon" />
+                <span class="target-name">{{ sendMessageDevice?.name }}</span>
+                <span class="target-status" :class="sendMessageDevice?.status">{{ formatStatus(sendMessageDevice?.status) }}</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">消息内容</label>
+                <textarea
+                  v-model="sendMessageText"
+                  class="input-field message-textarea"
+                  placeholder="请输入要发送的消息内容..."
+                  rows="5"
+                  maxlength="500"
+                ></textarea>
+                <div class="char-count">{{ sendMessageText.length }} / 500</div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">显示尺寸</label>
+                <div class="option-row">
+                  <label class="option-chip" :class="{ active: sendMessageSize === 'small' }">
+                    <input type="radio" v-model="sendMessageSize" value="small" />
+                    <span>小</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageSize === 'medium' }">
+                    <input type="radio" v-model="sendMessageSize" value="medium" />
+                    <span>中</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageSize === 'large' }">
+                    <input type="radio" v-model="sendMessageSize" value="large" />
+                    <span>大</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageSize === 'xlarge' }">
+                    <input type="radio" v-model="sendMessageSize" value="xlarge" />
+                    <span>超大（两倍）</span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">文字大小</label>
+                <div class="option-row">
+                  <label class="option-chip" :class="{ active: sendMessageFontSize === 'small' }">
+                    <input type="radio" v-model="sendMessageFontSize" value="small" />
+                    <span>小</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageFontSize === 'medium' }">
+                    <input type="radio" v-model="sendMessageFontSize" value="medium" />
+                    <span>中</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageFontSize === 'large' }">
+                    <input type="radio" v-model="sendMessageFontSize" value="large" />
+                    <span>大</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageFontSize === 'xlarge' }">
+                    <input type="radio" v-model="sendMessageFontSize" value="xlarge" />
+                    <span>超大</span>
+                  </label>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">持续时间</label>
+                <div class="option-row">
+                  <label class="option-chip" :class="{ active: sendMessageDurationMode === 'auto' }">
+                    <input type="radio" v-model="sendMessageDurationMode" value="auto" />
+                    <span>自动</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageDurationMode === 'short' }">
+                    <input type="radio" v-model="sendMessageDurationMode" value="short" />
+                    <span>短 (3秒)</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageDurationMode === 'medium' }">
+                    <input type="radio" v-model="sendMessageDurationMode" value="medium" />
+                    <span>中 (6秒)</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageDurationMode === 'long' }">
+                    <input type="radio" v-model="sendMessageDurationMode" value="long" />
+                    <span>长 (10秒)</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageDurationMode === 'custom' }">
+                    <input type="radio" v-model="sendMessageDurationMode" value="custom" />
+                    <span>自定义</span>
+                  </label>
+                  <label class="option-chip" :class="{ active: sendMessageDurationMode === 'persistent' }">
+                    <input type="radio" v-model="sendMessageDurationMode" value="persistent" />
+                    <span>持久</span>
+                  </label>
+                </div>
+                <div v-if="sendMessageDurationMode === 'custom'" class="custom-duration-input">
+                  <input
+                    type="number"
+                    v-model.number="sendMessageCustomSeconds"
+                    min="5"
+                    max="60"
+                    class="input-field custom-duration-field"
+                  />
+                  <span class="custom-duration-suffix">秒</span>
+                </div>
+                <div v-if="sendMessageDurationMode === 'persistent'" class="custom-duration-input persistent-hint">
+                  <span>持久通知：不自动关闭，60 秒后用户可手动关闭</span>
+                </div>
+              </div>
+              <div class="read-aloud-row">
+                <div class="read-aloud-label">
+                  <FluentIcons name="message" :size="18" class="read-aloud-icon" />
+                  <div>
+                    <div class="read-aloud-title">朗读消息</div>
+                    <div class="read-aloud-desc">被控设备将调用 Windows 内置语音模块朗读此消息</div>
+                  </div>
+                </div>
+                <CustomSwitch v-model="sendMessageReadAloud" />
+              </div>
+              <div class="read-aloud-row">
+                <div class="read-aloud-label">
+                  <FluentIcons name="lock" :size="18" class="read-aloud-icon" />
+                  <div>
+                    <div class="read-aloud-title">通知期间禁止关闭窗口</div>
+                    <div class="read-aloud-desc">开启后被控端的关闭按钮将失效，到达持续时间或（持久模式下）60 秒后才可关闭</div>
+                  </div>
+                </div>
+                <CustomSwitch v-model="sendMessageLockWindow" />
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn btn-secondary" @click="closeSendMessageModal" :disabled="sendingMessage">取消</button>
+              <button
+                class="btn btn-primary"
+                @click="confirmSendMessage"
+                :disabled="sendingMessage || !sendMessageText.trim()"
+              >
+                <FluentIcons v-if="sendingMessage" name="sync" :size="16" class="spin-icon" />
+                {{ sendingMessage ? '发送中...' : '发送' }}
+              </button>
+            </div>
+          </div>
+        </Transition>
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -251,10 +491,12 @@ import { ref, computed, onMounted, onUnmounted, inject } from 'vue'
 import { useRoute } from 'vue-router'
 import { deviceAPI, organizationAPI } from '@/api/organization'
 import CustomDropdown from '@/components/CustomDropdown.vue'
+import CustomSwitch from '@/components/CustomSwitch.vue'
 import FluentIcons from '@/components/FluentIcons.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { notify } from '@/utils/notification'
 import { getPermissions } from '@/stores/permissions'
+import wsService from '@/utils/websocket'
 
 const route = useRoute()
 const devices = ref([])
@@ -266,6 +508,50 @@ const filterOrg = ref('')
 const showConfirmDialog = ref(false)
 const confirmMessage = ref('')
 const currentDevice = ref(null)
+
+const activeTab = ref('info')
+const softwareList = ref([])
+const filteredSoftware = ref([])
+const softwareSearchQuery = ref('')
+const includeSystemSoftware = ref(false)
+const loadingSoftware = ref(false)
+const softwareCount = ref(0)
+
+// 发送消息相关状态
+const sendMessageVisible = ref(false)
+const sendMessageDevice = ref(null)
+const sendMessageText = ref('')
+const sendMessageReadAloud = ref(false)
+const sendMessageSize = ref('small')         // small | medium | large | xlarge（默认 small）
+const sendMessageFontSize = ref('medium')    // small | medium | large | xlarge（默认 medium）
+const sendMessageDurationMode = ref('auto')  // auto | short | medium | long | custom | persistent
+const sendMessageCustomSeconds = ref(10)     // 自定义秒数
+const sendMessageLockWindow = ref(false)     // 是否在通知时段禁止关闭窗口
+const sendingMessage = ref(false)
+
+// WebSocket 设备状态更新回调
+const handleDeviceStatusUpdate = (data) => {
+  console.log('[Devices] 收到设备状态更新:', data)
+  const deviceIndex = devices.value.findIndex(d => d.id === data.deviceId)
+  if (deviceIndex !== -1) {
+    // 更新设备状态
+    const device = devices.value[deviceIndex]
+    devices.value[deviceIndex] = {
+      ...device,
+      status: data.status,
+      lastHeartbeat: data.timestamp || new Date().toISOString(),
+      lastSeen: data.timestamp || new Date().toISOString(),
+      cpuUsage: data.cpu_usage ?? device.cpuUsage,
+      memoryUsage: data.memory_usage ?? device.memoryUsage,
+      diskUsage: data.disk_usage ?? device.diskUsage,
+      deviceName: data.deviceName ?? device.name,
+      ipAddress: data.ip_address ?? device.ipAddress
+    }
+  } else if (data.status === 'online') {
+    // 新设备上线，刷新列表
+    loadDevices()
+  }
+}
 
 const currentUserRole = computed(() => {
   const userStr = localStorage.getItem('user')
@@ -287,6 +573,7 @@ const devicePermissions = computed(() => {
   if (role === 'super_admin') {
     return {
       viewDetail: true,
+      viewSoftware: true,
       delete: true
     }
   }
@@ -295,12 +582,14 @@ const devicePermissions = computed(() => {
   if (!actionPerms) {
     return {
       viewDetail: false,
+      viewSoftware: false,
       delete: false
     }
   }
   
   return {
     viewDetail: actionPerms.viewDetail ?? false,
+    viewSoftware: actionPerms.viewSoftware ?? false,
     delete: actionPerms.delete ?? false
   }
 })
@@ -348,6 +637,8 @@ const formatStatus = (status) => {
 const formatOfflineReason = (reason) => {
   const reasonMap = {
     heartbeat_timeout: '心跳超时',
+    ws_timeout: 'WebSocket超时',
+    ws_disconnect: 'WebSocket断开',
     network_error: '网络错误',
     user_logout: '用户主动退出',
     shutdown: '正常关机',
@@ -382,24 +673,6 @@ const loadDevices = async () => {
   }
 }
 
-// 实时刷新设备状态
-let refreshInterval = null
-
-const startAutoRefresh = () => {
-  if (refreshInterval) return
-  // 每 2 秒刷新一次
-  refreshInterval = setInterval(async () => {
-    await loadDevices()
-  }, 1000)
-}
-
-const stopAutoRefresh = () => {
-  if (refreshInterval) {
-    clearInterval(refreshInterval)
-    refreshInterval = null
-  }
-}
-
 const loadOrganizations = async () => {
   try {
     const data = await organizationAPI.getAll()
@@ -417,10 +690,52 @@ const getOrganizationName = (orgId) => {
 
 const viewDevice = (device) => {
   selectedDeviceId.value = device.id
+  activeTab.value = 'info'
+  softwareList.value = []
+  filteredSoftware.value = []
+  softwareSearchQuery.value = ''
+  softwareCount.value = 0
 }
 
 const closeDeviceModal = () => {
   selectedDeviceId.value = null
+  softwareList.value = []
+  filteredSoftware.value = []
+  softwareCount.value = 0
+}
+
+const loadDeviceSoftware = async () => {
+  if (!selectedDeviceId.value || loadingSoftware.value) return
+  
+  loadingSoftware.value = true
+  try {
+    const data = await deviceAPI.getSoftware(selectedDeviceId.value, {
+      includeSystem: includeSystemSoftware.value
+    })
+    softwareList.value = data.software || []
+    softwareCount.value = data.totalCount || 0
+    filterSoftware()
+  } catch (error) {
+    console.error('Failed to load device software:', error)
+    softwareList.value = []
+    filteredSoftware.value = []
+    softwareCount.value = 0
+  } finally {
+    loadingSoftware.value = false
+  }
+}
+
+const filterSoftware = () => {
+  if (!softwareSearchQuery.value.trim()) {
+    filteredSoftware.value = softwareList.value
+    return
+  }
+  
+  const query = softwareSearchQuery.value.toLowerCase()
+  filteredSoftware.value = softwareList.value.filter(sw => 
+    sw.name?.toLowerCase().includes(query) ||
+    sw.publisher?.toLowerCase().includes(query)
+  )
 }
 
 const showDeleteConfirm = (device) => {
@@ -454,6 +769,103 @@ const cancelDelete = () => {
   currentDevice.value = null
 }
 
+// ===== 发送消息功能 =====
+const openSendMessageModal = (device) => {
+  if (device.status !== 'online') {
+    notify.warning('设备不在线，无法发送消息')
+    return
+  }
+  sendMessageDevice.value = device
+  sendMessageText.value = ''
+  sendMessageReadAloud.value = false
+  sendMessageSize.value = 'small'         // 默认小
+  sendMessageFontSize.value = 'medium'    // 默认中
+  sendMessageDurationMode.value = 'auto'  // 默认自动
+  sendMessageCustomSeconds.value = 10
+  sendMessageLockWindow.value = false
+  sendingMessage.value = false
+  sendMessageVisible.value = true
+}
+
+const closeSendMessageModal = () => {
+  if (sendingMessage.value) return
+  sendMessageVisible.value = false
+  sendMessageDevice.value = null
+  sendMessageText.value = ''
+  sendMessageReadAloud.value = false
+  sendMessageSize.value = 'small'
+  sendMessageFontSize.value = 'medium'
+  sendMessageDurationMode.value = 'auto'
+  sendMessageCustomSeconds.value = 10
+  sendMessageLockWindow.value = false
+}
+
+const confirmSendMessage = () => {
+  if (!sendMessageDevice.value) return
+  const text = sendMessageText.value.trim()
+  if (!text) {
+    notify.warning('消息内容不能为空')
+    return
+  }
+
+  sendingMessage.value = true
+  const device = sendMessageDevice.value
+  const readAloud = sendMessageReadAloud.value
+  const size = sendMessageSize.value
+  const fontSize = sendMessageFontSize.value
+  const durationMode = sendMessageDurationMode.value
+  const lockWindow = sendMessageLockWindow.value
+  let customSeconds = 10
+  if (durationMode === 'custom') {
+    customSeconds = Math.max(5, Math.min(60, Number(sendMessageCustomSeconds.value) || 10))
+  } else if (durationMode === 'short') {
+    customSeconds = 3
+  } else if (durationMode === 'medium') {
+    customSeconds = 6
+  } else if (durationMode === 'long') {
+    customSeconds = 10
+  } else if (durationMode === 'persistent') {
+    // 持久模式：customDurationSeconds 在后端不再使用，但仍传递一个合法值
+    customSeconds = 10
+  }
+
+  const sent = wsService.sendMessage(device.id, text, readAloud, {
+    size,
+    fontSize,
+    durationMode,
+    customDurationSeconds: customSeconds,
+    lockWindow
+  })
+  if (!sent) {
+    sendingMessage.value = false
+    return
+  }
+
+  // 监听一次性的发送结果
+  const onResult = (data) => {
+    if (data.deviceId && data.deviceId !== device.id) return
+    wsService.off('onMessageSent', onResult)
+    sendingMessage.value = false
+
+    if (data.success) {
+      notify.success(`消息已发送到设备 "${device.name}"`)
+      closeSendMessageModal()
+    } else {
+      notify.error(data.message || `发送到设备 "${device.name}" 失败`)
+    }
+  }
+  wsService.on('onMessageSent', onResult)
+
+  // 超时兜底：10 秒未收到结果
+  setTimeout(() => {
+    if (sendingMessage.value) {
+      wsService.off('onMessageSent', onResult)
+      sendingMessage.value = false
+      notify.warning('发送消息超时，请检查设备连接状态')
+    }
+  }, 10000)
+}
+
 const formatDate = (date, showSeconds = false) => {
   if (!date) return '从未在线'
   const d = new Date(date)
@@ -476,16 +888,33 @@ const formatDate = (date, showSeconds = false) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// 定时刷新定时器
+let refreshTimer = null
+
 onMounted(async () => {
   if (route?.query?.org) {
     filterOrg.value = parseInt(route.query.org)
   }
   await Promise.all([loadDevices(), loadOrganizations()])
-  startAutoRefresh()
+  
+  // 订阅 WebSocket 设备状态更新
+  wsService.on('onDeviceStatusUpdate', handleDeviceStatusUpdate)
+  
+  // 每 1 秒自动刷新设备列表
+  refreshTimer = setInterval(() => {
+    loadDevices()
+  }, 1000)
 })
 
 onUnmounted(() => {
-  stopAutoRefresh()
+  // 移除 WebSocket 回调
+  wsService.off('onDeviceStatusUpdate', handleDeviceStatusUpdate)
+  
+  // 清除定时器
+  if (refreshTimer) {
+    clearInterval(refreshTimer)
+    refreshTimer = null
+  }
 })
 </script>
 
@@ -878,6 +1307,17 @@ tbody tr:hover {
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
 }
 
+.button-icon.message-btn {
+  color: #0078d4;
+  border-color: rgba(0, 120, 212, 0.2);
+}
+
+.button-icon.message-btn:hover {
+  background: rgba(0, 120, 212, 0.1);
+  border-color: rgba(0, 120, 212, 0.3);
+  box-shadow: 0 2px 8px rgba(0, 120, 212, 0.2);
+}
+
 .button-icon:active {
   transform: scale(0.98);
 }
@@ -1157,6 +1597,201 @@ tbody tr:hover {
   color: var(--fui-text);
 }
 
+.modal-content-large {
+  max-width: 1000px;
+}
+
+.modal-tabs {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  gap: 4px;
+  padding: 0 28px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--fui-text-secondary);
+  font-size: 0.875em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.tab-btn:hover {
+  color: var(--fui-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-btn.active {
+  color: var(--fui-text);
+  border-bottom-color: var(--fui-accent, #0078d4);
+}
+
+.software-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  font-size: 0.75em;
+  font-weight: 600;
+}
+
+.software-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.software-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.software-search {
+  flex: 1;
+  min-width: 200px;
+}
+
+.software-search .input-field {
+  width: 100%;
+  height: 36px;
+  padding: 0 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: var(--fui-text);
+  font-size: 0.875em;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.software-search .input-field:focus {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.software-filters {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.filter-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 0.875em;
+  color: var(--fui-text-secondary);
+}
+
+.filter-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--fui-accent, #0078d4);
+}
+
+.software-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  gap: 12px;
+  color: var(--fui-text-secondary);
+}
+
+.spin-icon {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.software-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  color: var(--fui-text-secondary);
+  gap: 12px;
+}
+
+.software-empty .empty-icon {
+  opacity: 0.4;
+}
+
+.software-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.software-count-info {
+  font-size: 0.8125em;
+  color: var(--fui-text-secondary);
+}
+
+.software-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9375em;
+}
+
+.software-table thead th {
+  text-align: left;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--fui-text-secondary);
+  font-weight: 600;
+  font-size: 0.8125em;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.software-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  color: var(--fui-text);
+  font-size: 0.9375em;
+}
+
+.software-table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.software-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  font-size: 0.9375em;
+}
+
+.software-icon {
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+
 /* 移动端响应式 */
 @media (max-width: 1024px) {
   .devices-page {
@@ -1304,6 +1939,248 @@ tbody tr:hover {
     width: 14px;
     height: 14px;
   }
+}
+
+/* ===== 发送消息对话框 ===== */
+.send-message-target {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 0.9em;
+}
+
+.send-message-target .target-icon {
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.send-message-target .target-name {
+  font-weight: 600;
+  color: var(--fui-text);
+}
+
+.send-message-target .target-status {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 99px;
+  font-size: 0.75em;
+  font-weight: 600;
+}
+
+.send-message-target .target-status.online {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+
+.send-message-target .target-status.offline {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.send-message-target .target-status.logged_out {
+  background: rgba(156, 163, 175, 0.15);
+  color: #6b7280;
+  border: 1px solid rgba(156, 163, 175, 0.25);
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.form-label {
+  font-size: 0.8125em;
+  font-weight: 600;
+  color: var(--fui-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.message-textarea {
+  width: 100%;
+  height: auto;
+  min-height: 120px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: var(--fui-text);
+  font-size: 0.9375em;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.message-textarea:focus {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(0, 120, 212, 0.5);
+  box-shadow: 0 0 0 3px rgba(0, 120, 212, 0.1);
+}
+
+.message-textarea::placeholder {
+  color: var(--fui-text-secondary);
+  opacity: 0.6;
+}
+
+.char-count {
+  text-align: right;
+  font-size: 0.75em;
+  color: var(--fui-text-secondary);
+  opacity: 0.7;
+}
+
+.read-aloud-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+}
+
+.read-aloud-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.read-aloud-icon {
+  color: #0078d4;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.read-aloud-title {
+  font-size: 0.9375em;
+  font-weight: 600;
+  color: var(--fui-text);
+}
+
+.read-aloud-desc {
+  font-size: 0.75em;
+  color: var(--fui-text-secondary);
+  margin-top: 2px;
+}
+
+/* 尺寸/时长选项芯片 */
+.option-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.option-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 16px;
+  min-width: 60px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  font-size: 0.875em;
+  color: var(--fui-text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s;
+}
+
+.option-chip:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.option-chip input[type="radio"] {
+  display: none;
+}
+
+.option-chip.active {
+  background: rgba(0, 120, 212, 0.15);
+  border-color: var(--fui-primary, #0078d4);
+  color: var(--fui-primary, #0078d4);
+  font-weight: 600;
+}
+
+.custom-duration-input {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.custom-duration-input.persistent-hint {
+  color: var(--fui-text-secondary);
+  font-size: 0.85em;
+  padding: 8px 12px;
+  background: rgba(252, 211, 77, 0.08);
+  border: 1px dashed rgba(252, 211, 77, 0.35);
+  border-radius: 6px;
+}
+
+.custom-duration-field {
+  width: 100px;
+  text-align: center;
+}
+
+.custom-duration-suffix {
+  font-size: 0.875em;
+  color: var(--fui-text-secondary);
+}
+
+.modal-footer .btn {
+  min-width: 100px;
+  padding: 9px 22px;
+  border-radius: 8px;
+  font-size: 0.875em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+}
+
+.modal-footer .btn-secondary {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--fui-text);
+}
+
+.modal-footer .btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.modal-footer .btn-primary {
+  background: #0078d4;
+  border-color: #0078d4;
+  color: white;
+}
+
+.modal-footer .btn-primary:hover:not(:disabled) {
+  background: #106ebe;
+  border-color: #106ebe;
+  box-shadow: 0 4px 12px rgba(0, 120, 212, 0.3);
+}
+
+.modal-footer .btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 </style>

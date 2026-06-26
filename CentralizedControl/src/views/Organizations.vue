@@ -16,6 +16,7 @@
             <div class="org-actions">
               <button class="button-primary" @click="editOrganization(org)">编辑</button>
               <button class="button-primary" @click="viewDevices(org)">查看设备</button>
+              <button class="button-primary" @click="exportConfig(org)">导出配置</button>
             </div>
           </div>
           <div class="org-details">
@@ -187,6 +188,27 @@ const cancelDelete = () => {
 
 const viewDevices = (org) => {
   router.push(`/devices?org=${org.id}`)
+}
+
+const exportConfig = async (org) => {
+  try {
+    const data = await organizationAPI.exportConfig(org.id)
+    
+    const blob = new Blob([data.configBase64], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = data.filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+    
+    notify.success('配置文件导出成功')
+  } catch (error) {
+    console.error('Failed to export config:', error)
+    notify.error('导出配置失败，请重试')
+  }
 }
 
 const formatDate = (date) => {
@@ -640,5 +662,30 @@ textarea.input-field {
   flex: 0 0 auto;
   width: 140px;
   padding: 12px 24px;
+}
+
+.button-secondary {
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: var(--fui-text);
+  font-size: 0.875em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.button-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+[data-theme='dark'] .button-secondary {
+  background: rgba(60, 60, 60, 0.5);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme='dark'] .button-secondary:hover {
+  background: rgba(80, 80, 80, 0.6);
 }
 </style>

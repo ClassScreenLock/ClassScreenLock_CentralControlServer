@@ -390,6 +390,7 @@ const orgPermissions = [
 
 const devicePermissions = [
   { key: 'viewDetail', title: '查看设备详情', description: '是否可以查看设备的详细信息', icon: 'view' },
+  { key: 'viewSoftware', title: '查看已安装软件', description: '是否可以查看设备上安装的软件列表', icon: 'app_folder' },
   { key: 'delete', title: '删除设备', description: '是否可以删除已注册的设备', icon: 'delete' }
 ]
 
