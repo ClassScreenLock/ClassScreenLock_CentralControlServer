@@ -226,7 +226,9 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.network-intercept {
+/* 修复：模板使用 network-intercept-page，此处匹配 */
+.network-intercept,
+.network-intercept-page {
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -445,5 +447,47 @@ onMounted(() => {
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ===== 响应式适配 ===== */
+@media (max-width: 768px) {
+  .network-intercept,
+  .network-intercept-page {
+    gap: 16px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .page-header h2 {
+    font-size: 1.1em;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .config-section {
+    padding: 14px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .rule-item {
+    flex-direction: column;
+    padding: 12px;
+  }
+
+  .rule-options {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
 }
 </style>

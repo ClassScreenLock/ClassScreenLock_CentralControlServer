@@ -36,6 +36,12 @@ const routes = [
         meta: { title: '设备管理' }
       },
       {
+        path: '/screen-monitor',
+        name: 'ScreenMonitor',
+        component: () => import('../views/ScreenMonitor.vue'),
+        meta: { title: '集控端屏幕监控' }
+      },
+      {
         path: '/accounts',
         name: 'Accounts',
         component: () => import('../views/Accounts.vue'),
@@ -70,6 +76,18 @@ const routes = [
         name: 'SystemLogs',
         component: () => import('../views/SystemLogs.vue'),
         meta: { title: '系统日志' }
+      },
+      {
+        path: '/schedule-control',
+        name: 'ScheduleControl',
+        component: () => import('../views/ScheduleControl.vue'),
+        meta: { title: '课表控制' }
+      },
+      {
+        path: '/profile',
+        name: 'UserProfile',
+        component: () => import('../views/UserProfile.vue'),
+        meta: { title: '个人资料' }
       }
     ]
   }
@@ -130,12 +148,15 @@ router.beforeEach((to, from) => {
     '/dashboard': ['super_admin', 'admin', 'user'],
     '/organizations': ['super_admin', 'admin'],
     '/devices': ['super_admin', 'admin'],
+    '/screen-monitor': ['super_admin', 'admin', 'user'],
     '/accounts': ['super_admin', 'admin'],
     '/security-config': ['super_admin', 'admin'],
     '/network-intercept': ['super_admin', 'admin'],
     '/settings': ['super_admin', 'admin', 'user'],
     '/permissions': ['super_admin'],
-    '/system-logs': ['super_admin', 'admin']
+    '/system-logs': ['super_admin', 'admin'],
+    '/schedule-control': ['super_admin', 'admin'],
+    '/profile': ['super_admin', 'admin', 'user']
   }
   
   // 获取当前用户的页面权限配置

@@ -21,7 +21,7 @@
             placeholder="所有权限"
           />
         </div>
-        <button @click="openAddModal" class="btn-primary">
+        <button v-if="hasActionPermission('account', 'create')" @click="openAddModal" class="btn-primary">
           <FluentIcons name="add" :size="18" />
           <span>添加账户</span>
         </button>
@@ -71,25 +71,25 @@
           </thead>
           <tbody>
             <tr v-for="account in filteredAccounts" :key="account.id">
-              <td>
+              <td data-label="用户名">
                 <div class="account-name">
                   <FluentIcons name="person" :size="18" class="account-icon" />
                   {{ account.username }}
                 </div>
               </td>
-              <td>
+              <td data-label="权限">
                 <div class="role-badge" :class="account.role">
                   <span class="role-dot" :class="account.role"></span>
                   {{ formatRole(account.role) }}
                 </div>
               </td>
-              <td class="time-cell">{{ formatDate(account.createdAt) }}</td>
-              <td class="time-cell">{{ formatDate(account.lastLoginAt) }}</td>
-              <td>
-                <button class="button-icon" @click="editAccount(account)" title="编辑">
+              <td data-label="创建时间" class="time-cell">{{ formatDate(account.createdAt) }}</td>
+              <td data-label="最后登录" class="time-cell">{{ formatDate(account.lastLoginAt) }}</td>
+              <td data-label="操作">
+                <button v-if="hasActionPermission('account', 'changeRole')" class="button-icon" @click="editAccount(account)" title="编辑">
                   <FluentIcons name="edit" :size="18" />
                 </button>
-                <button class="button-icon" @click="showDeleteConfirm(account)" title="删除">
+                <button v-if="hasActionPermission('account', 'delete')" class="button-icon" @click="showDeleteConfirm(account)" title="删除">
                   <FluentIcons name="delete" :size="18" />
                 </button>
               </td>
@@ -132,6 +132,7 @@
               v-model="formData.role"
               :options="roleOptions"
               placeholder="请选择权限"
+              :disabled="isEditing && !hasActionPermission('account', 'changeRole')"
             />
           </div>
         </div>
@@ -160,7 +161,9 @@ import CustomDropdown from '@/components/CustomDropdown.vue'
 import FluentIcons from '@/components/FluentIcons.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { notify } from '@/utils/notification'
+import { usePermissions } from '@/composables/usePermissions'
 
+const { hasActionPermission } = usePermissions()
 const showNotification = inject('showNotification')
 
 const accounts = ref([])
@@ -923,5 +926,134 @@ tbody tr:hover {
   gap: 12px;
   padding: 20px 24px;
   border-top: 1px solid var(--fui-border);
+}
+
+/* ===== 响应式适配 ===== */
+@media (max-width: 768px) {
+  .accounts-page {
+    padding: 12px;
+    gap: 14px;
+    min-height: auto;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .page-title h2 {
+    font-size: 1.1em;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .filter-group :deep(.custom-dropdown) {
+    min-width: 100%;
+  }
+
+  .btn-primary, .btn-secondary {
+    height: 36px;
+    padding: 0 16px;
+    font-size: 0.9em;
+  }
+
+  /* 移动端表格 → 卡片布局 */
+  table {
+    display: table !important;
+    overflow: visible !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  thead {
+    display: none;
+  }
+
+  tbody tr {
+    display: block;
+    margin-bottom: 12px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  tbody tr:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  tbody td {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border: none !important;
+    font-size: 0.85em;
+    text-align: left;
+  }
+
+  tbody td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    min-width: 70px;
+    font-weight: 600;
+    font-size: 0.8em;
+    color: var(--fui-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  tbody td:last-child::before {
+    content: none;
+  }
+
+  tbody td:last-child {
+    justify-content: flex-end;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    margin-top: 6px;
+  }
+
+  tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .time-cell {
+    font-size: 0.85em;
+  }
+
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    border-radius: 12px;
+  }
+
+  .modal-glass, .modal-refraction, .modal-content::before {
+    border-radius: 12px;
+  }
+
+  .modal-header {
+    padding: 16px 18px;
+  }
+
+  .modal-body {
+    padding: 18px;
+  }
+
+  .modal-footer {
+    padding: 0 18px 18px;
+  }
 }
 </style>

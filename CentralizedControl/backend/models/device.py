@@ -1,4 +1,6 @@
 from typing import List, Optional, Dict, Any
+import json
+from datetime import datetime
 
 
 class DeviceModel:
@@ -102,3 +104,47 @@ class DeviceModel:
             cursor = conn.cursor()
             cursor.execute('SELECT * FROM devices WHERE organization_id = ?', (org_id,))
             return [dict(row) for row in cursor.fetchall()]
+
+    # ========== 设备级课表配置 ==========
+
+    def get_schedule_config(self, device_id: str) -> Optional[Dict[str, Any]]:
+        """获取设备的课表配置（可能为设备专属配置或组织默认配置）"""
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT * FROM device_schedule_configs WHERE device_id = ?', (device_id,))
+            row = cursor.fetchone()
+            if row and row['schedule_config']:
+                result = json.loads(row['schedule_config'])
+                result['_source'] = 'device'
+                return result
+
+            # 回退到组织配置
+            device = self.get_by_id(device_id)
+            if device and device.get('organization_id'):
+                org_config = self.db.organizations.get_schedule_config(device['organization_id'])
+                if org_config:
+                    org_config['_source'] = 'organization'
+                    return org_config
+
+            return None
+
+    def save_schedule_config(self, device_id: str, schedule_config: Dict) -> bool:
+        """保存设备专属课表配置"""
+        schedule_json = json.dumps(schedule_config, ensure_ascii=False)
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT OR REPLACE INTO device_schedule_configs
+                (id, device_id, schedule_config, updated_at)
+                VALUES (?, ?, ?, ?)
+            ''', (device_id, device_id, schedule_json, datetime.now().isoformat()))
+            conn.commit()
+            return True
+
+    def delete_schedule_config(self, device_id: str) -> bool:
+        """删除设备专属课表配置（恢复使用组织配置）"""
+        with self.db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('DELETE FROM device_schedule_configs WHERE device_id = ?', (device_id,))
+            conn.commit()
+            return cursor.rowcount > 0

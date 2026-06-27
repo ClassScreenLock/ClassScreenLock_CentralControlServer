@@ -21,9 +21,13 @@ class PermissionModel:
                 )
             ''')
             conn.commit()
-            
+
             self._migrate_system_logs_permission(conn)
             self._migrate_view_software_permission(conn)
+            self._migrate_screen_monitor_permission(conn)
+            self._migrate_schedule_control_permission(conn)
+            self._migrate_permission_mgmt_keys(conn)
+            self._migrate_schedule_keys(conn)
     
     def _migrate_view_software_permission(self, conn) -> None:
         import json
@@ -89,6 +93,140 @@ class PermissionModel:
         
         conn.commit()
 
+    def _migrate_screen_monitor_permission(self, conn) -> None:
+        """给已存在的角色补上 /screen-monitor 页面权限（兼容旧数据库）"""
+        import json
+        cursor = conn.cursor()
+        cursor.execute('SELECT role, page_permissions FROM role_permissions')
+        rows = cursor.fetchall()
+
+        for row in rows:
+            role = row['role']
+            page_perms = json.loads(row['page_permissions']) if row['page_permissions'] else self.get_default_page_permissions()
+
+            needs_update = False
+
+            if '/screen-monitor' not in page_perms:
+                page_perms['/screen-monitor'] = ['super_admin', 'admin', 'user']
+                needs_update = True
+
+            if needs_update:
+                page_json = json.dumps(page_perms, ensure_ascii=False)
+                cursor.execute('''
+                    UPDATE role_permissions
+                    SET page_permissions = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE role = ?
+                ''', (page_json, role))
+
+        conn.commit()
+
+    def _migrate_schedule_control_permission(self, conn) -> None:
+        """给已存在的角色补上 /schedule-control 页面权限（兼容旧数据库）"""
+        import json
+        cursor = conn.cursor()
+        cursor.execute('SELECT role, page_permissions FROM role_permissions')
+        rows = cursor.fetchall()
+
+        for row in rows:
+            role = row['role']
+            page_perms = json.loads(row['page_permissions']) if row['page_permissions'] else self.get_default_page_permissions()
+
+            needs_update = False
+
+            if '/schedule-control' not in page_perms:
+                page_perms['/schedule-control'] = ['super_admin', 'admin']
+                needs_update = True
+
+            if needs_update:
+                page_json = json.dumps(page_perms, ensure_ascii=False)
+                cursor.execute('''
+                    UPDATE role_permissions
+                    SET page_permissions = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE role = ?
+                ''', (page_json, role))
+
+        conn.commit()
+
+    def _migrate_permission_mgmt_keys(self, conn) -> None:
+        """将旧的 modifyLowerOrSame 拆分为 modifyLower + modifySame"""
+        import json
+        cursor = conn.cursor()
+        cursor.execute('SELECT role, action_permissions FROM role_permissions')
+        rows = cursor.fetchall()
+
+        for row in rows:
+            role = row['role']
+            action_perms = json.loads(row['action_permissions']) if row['action_permissions'] else self.get_default_action_permissions()
+
+            if 'permissionMgmt' not in action_perms:
+                continue
+
+            needs_update = False
+            mgmt = action_perms['permissionMgmt']
+
+            if 'modifyLowerOrSame' in mgmt:
+                val = mgmt.pop('modifyLowerOrSame')
+                mgmt['modifyLower'] = val
+                mgmt['modifySame'] = val
+                needs_update = True
+
+            if 'modifyLower' not in mgmt:
+                mgmt['modifyLower'] = True
+                needs_update = True
+            if 'modifySame' not in mgmt:
+                mgmt['modifySame'] = True
+                needs_update = True
+
+            if needs_update:
+                action_json = json.dumps(action_perms, ensure_ascii=False)
+                cursor.execute('''
+                    UPDATE role_permissions
+                    SET action_permissions = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE role = ?
+                ''', (action_json, role))
+
+        conn.commit()
+
+    def _migrate_schedule_keys(self, conn) -> None:
+        """将旧的 schedule.edit 拆分为 editOrg + editDevice"""
+        import json
+        cursor = conn.cursor()
+        cursor.execute('SELECT role, action_permissions FROM role_permissions')
+        rows = cursor.fetchall()
+
+        for row in rows:
+            role = row['role']
+            action_perms = json.loads(row['action_permissions']) if row['action_permissions'] else self.get_default_action_permissions()
+
+            if 'schedule' not in action_perms:
+                continue
+
+            needs_update = False
+            sched = action_perms['schedule']
+
+            if 'edit' in sched:
+                val = sched.pop('edit')
+                sched['editOrg'] = val
+                sched['editDevice'] = val
+                needs_update = True
+
+            if 'editOrg' not in sched:
+                sched['editOrg'] = True
+                needs_update = True
+            if 'editDevice' not in sched:
+                sched['editDevice'] = True
+                needs_update = True
+
+            if needs_update:
+                action_json = json.dumps(action_perms, ensure_ascii=False)
+                cursor.execute('''
+                    UPDATE role_permissions
+                    SET action_permissions = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE role = ?
+                ''', (action_json, role))
+
+        conn.commit()
+
     def get_default_page_permissions(self) -> Dict[str, Any]:
         return {
             '/dashboard': ['super_admin', 'admin', 'user'],
@@ -97,9 +235,11 @@ class PermissionModel:
             '/accounts': ['super_admin', 'admin'],
             '/security-config': ['super_admin', 'admin'],
             '/network-intercept': ['super_admin', 'admin'],
+            '/schedule-control': ['super_admin', 'admin'],
             '/settings': ['super_admin', 'admin', 'user'],
             '/permissions': ['super_admin'],
-            '/system-logs': ['super_admin', 'admin']
+            '/system-logs': ['super_admin', 'admin'],
+            '/screen-monitor': ['super_admin', 'admin', 'user']
         }
 
     def get_default_action_permissions(self) -> Dict[str, Any]:
@@ -112,7 +252,9 @@ class PermissionModel:
             'device': {
                 'viewDetail': True,
                 'viewSoftware': True,
-                'delete': True
+                'delete': True,
+                'sendMessage': True,
+                'remoteLock': True
             },
             'account': {
                 'create': True,
@@ -138,7 +280,19 @@ class PermissionModel:
                 'clearAll': True
             },
             'permissionMgmt': {
-                'modifyLowerOrSame': True
+                'modifyLower': True,
+                'modifySame': True
+            },
+            'schedule': {
+                'editOrg': True,
+                'editDevice': True
+            },
+            'screenMonitor': {
+                'startMonitor': True,
+                'stopMonitor': True,
+                'remoteLock': True,
+                'sendMessage': True,
+                'adjustSettings': True
             }
         }
 

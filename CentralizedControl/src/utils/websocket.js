@@ -31,7 +31,14 @@ class WebSocketService {
       onConfigUpdate: [],
       onNotification: [],
       onDeviceList: [],
-      onMessageSent: []
+      onMessageSent: [],
+      onScreenMonitorFrame: [],
+      onScreenMonitorStatus: [],
+      onScreenMonitorStartAck: [],
+      onScreenMonitorStopAck: [],
+      onScreenMonitorSettingsAck: [],
+      onScreenMonitorSettingsApplied: [],
+      onLockState: []
     }
   }
   
@@ -209,6 +216,48 @@ class WebSocketService {
       this._triggerCallbacks('onMessageSent', data)
     })
 
+    // 屏幕监控：被控端推来的实时帧
+    this.socket.on('screen_monitor_frame', (data) => {
+      console.log('[WebSocket] 收到 screen_monitor_frame, deviceId:', data?.deviceId, 'hasData:', !!data?.data)
+      if (data && data.deviceId) {
+        this._triggerCallbacks('onScreenMonitorFrame', data)
+      } else {
+        console.warn('[WebSocket] screen_monitor_frame 数据异常:', data)
+      }
+    })
+
+    // 屏幕监控：被控端推来的状态变化
+    this.socket.on('screen_monitor_status', (data) => {
+      console.log('[WebSocket] 屏幕状态:', data)
+      this._triggerCallbacks('onScreenMonitorStatus', data)
+    })
+
+    // 屏幕监控：集控端发起指令的 ACK
+    this.socket.on('screen_monitor_start_ack', (data) => {
+      console.log('[WebSocket] 屏幕监控 start ack:', data)
+      this._triggerCallbacks('onScreenMonitorStartAck', data)
+    })
+    this.socket.on('screen_monitor_stop_ack', (data) => {
+      console.log('[WebSocket] 屏幕监控 stop ack:', data)
+      this._triggerCallbacks('onScreenMonitorStopAck', data)
+    })
+    this.socket.on('screen_monitor_settings_ack', (data) => {
+      console.log('[WebSocket] 屏幕监控 settings ack:', data)
+      this._triggerCallbacks('onScreenMonitorSettingsAck', data)
+    })
+
+    // 屏幕监控：被控端实际应用后的确认
+    this.socket.on('screen_monitor_settings_applied', (data) => {
+      console.log('[WebSocket] 屏幕参数已生效:', data)
+      this._triggerCallbacks('onScreenMonitorSettingsApplied', data)
+    })
+
+    // 远程锁屏：被控端推送的锁屏状态
+    this.socket.on('lock_state', (data) => {
+      console.log('[WebSocket] 锁屏状态:', data)
+      this._triggerCallbacks('onLockState', data)
+    })
+
     // 错误消息
     this.socket.on('error', (data) => {
       console.error('[WebSocket] 错误:', data)
@@ -337,7 +386,148 @@ class WebSocketService {
     })
     return true
   }
-  
+
+  /**
+   * 向指定被控端发起屏幕监控。
+   * @param {string} deviceId 目标设备 ID
+   * @param {object} options {fps, jpegQuality, maxWidth, monitorIndex}
+   * @param {string} sourceId 发起方（可选，默认取本地用户 ID）
+   */
+  startScreenMonitor(deviceId, options = {}, sourceId = null) {
+    if (!this.socket || !this.isConnected) {
+      notify.warning('实时连接未建立，无法发起屏幕监控')
+      return false
+    }
+    if (!deviceId) {
+      notify.warning('缺少目标设备ID')
+      return false
+    }
+
+    const fps = Math.max(1, Math.min(30, parseInt(options.fps ?? 10, 10) || 10))
+    const jpegQuality = Math.max(1, Math.min(100, parseInt(options.jpegQuality ?? 60, 10) || 60))
+    const rawW = parseInt(options.maxWidth, 10)
+    const maxWidth = Math.max(0, Math.min(7680, Number.isNaN(rawW) ? 1280 : rawW))
+    const monitorIndex = Math.max(0, parseInt(options.monitorIndex ?? 0, 10) || 0)
+
+    this.socket.emit('screen_monitor_start', {
+      sourceDeviceId: sourceId,
+      targetDeviceId: deviceId,
+      fps,
+      jpegQuality,
+      maxWidth,
+      monitorIndex
+    })
+    return true
+  }
+
+  /**
+   * 停止指定被控端的屏幕监控。
+   * @param {string} deviceId 目标设备 ID
+   * @param {string} sourceId 发起方（可选）
+   */
+  stopScreenMonitor(deviceId, sourceId = null) {
+    if (!this.socket || !this.isConnected) {
+      notify.warning('实时连接未建立，无法停止屏幕监控')
+      return false
+    }
+    if (!deviceId) {
+      notify.warning('缺少目标设备ID')
+      return false
+    }
+    this.socket.emit('screen_monitor_stop', {
+      sourceDeviceId: sourceId,
+      targetDeviceId: deviceId
+    })
+    return true
+  }
+
+  /**
+   * 动态调整指定被控端屏幕监控参数（不中断流）。
+   */
+  updateScreenMonitorSettings(deviceId, options = {}, sourceId = null) {
+    if (!this.socket || !this.isConnected) {
+      notify.warning('实时连接未建立，无法调整屏幕参数')
+      return false
+    }
+    if (!deviceId) {
+      notify.warning('缺少目标设备ID')
+      return false
+    }
+    const fps = Math.max(1, Math.min(30, parseInt(options.fps ?? 10, 10) || 10))
+    const jpegQuality = Math.max(1, Math.min(100, parseInt(options.jpegQuality ?? 60, 10) || 60))
+    const rawW = parseInt(options.maxWidth, 10)
+    const maxWidth = Math.max(0, Math.min(7680, Number.isNaN(rawW) ? 1280 : rawW))
+
+    this.socket.emit('screen_monitor_settings', {
+      sourceDeviceId: sourceId,
+      targetDeviceId: deviceId,
+      fps,
+      jpegQuality,
+      maxWidth
+    })
+    return true
+  }
+
+  /**
+   * 远程锁屏指定设备。
+   * @param {string} deviceId 目标设备 ID
+   */
+  remoteLock(deviceId) {
+    if (!this.socket || !this.isConnected) {
+      notify.warning('实时连接未建立')
+      return false
+    }
+    this.socket.emit('remote_lock', { targetDeviceId: deviceId })
+    return true
+  }
+
+  /**
+   * 远程解锁指定设备。
+   * @param {string} deviceId 目标设备 ID
+   */
+  remoteUnlock(deviceId) {
+    if (!this.socket || !this.isConnected) {
+      notify.warning('实时连接未建立')
+      return false
+    }
+    this.socket.emit('remote_unlock', { targetDeviceId: deviceId })
+    return true
+  }
+
+  /**
+   * 推送课表到组织内所有设备
+   * @param {string} orgId 组织ID
+   * @param {object} schedule 课表数据
+   */
+  pushScheduleToOrg(orgId, schedule) {
+    if (!this.socket || !this.isConnected) {
+      notify.warning('实时连接未建立，无法推送课表')
+      return false
+    }
+    this.socket.emit('push_schedule_to_org', {
+      organizationId: orgId,
+      schedule
+    })
+    return true
+  }
+
+  /**
+   * 推送课表到单个设备
+   * @param {string} deviceId 设备ID
+   * @param {object} schedule 课表数据
+   */
+  pushScheduleToDevice(deviceId, schedule) {
+    if (!this.socket || !this.isConnected) {
+      notify.warning('实时连接未建立，无法推送课表')
+      return false
+    }
+    this.socket.emit('push_schedule_to_device', {
+      deviceId,
+      schedule
+    })
+    return true
+  }
+
   /**
    * 注册回调函数
    */
@@ -364,6 +554,10 @@ class WebSocketService {
    */
   _triggerCallbacks(event, data) {
     if (this.callbacks[event]) {
+      const count = this.callbacks[event].length
+      if (count === 0 && event === 'onScreenMonitorFrame') {
+        console.warn('[WebSocket] onScreenMonitorFrame 无回调注册！')
+      }
       this.callbacks[event].forEach(callback => {
         try {
           callback(data)
@@ -371,6 +565,8 @@ class WebSocketService {
           console.error(`[WebSocket] 回调执行失败 (${event}):`, e)
         }
       })
+    } else if (event === 'onScreenMonitorFrame') {
+      console.warn('[WebSocket] callbacks 中不存在 onScreenMonitorFrame 键！')
     }
   }
   

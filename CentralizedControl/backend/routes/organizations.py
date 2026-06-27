@@ -319,4 +319,57 @@ def create_organizations_routes(db, token_required):
             'filename': f"org_{organization.get('name', 'config')}_{org_id[:8]}.cslcfg"
         })
 
+    # ========== 课表配置 API ==========
+
+    @orgs_bp.route('/<org_id>/schedule-config', methods=['GET'])
+    def get_schedule_config(org_id):
+        """获取组织的课表配置"""
+        schedule = db.organizations.get_schedule_config(org_id)
+        if schedule:
+            schedule['_source'] = 'organization'
+            return jsonify(schedule)
+        return jsonify({
+            'weeklyCycleCount': 4,
+            'termStartDate': None,
+            'weeklies': []
+        })
+
+    @orgs_bp.route('/<org_id>/schedule-config', methods=['PUT'])
+    @token_required
+    @require_action_permission(db, 'org', 'edit')
+    def update_schedule_config(user, org_id):
+        """更新组织的课表配置并推送到所有设备"""
+        if user['role'] not in ['super_admin', 'admin']:
+            return jsonify({'error': '权限不足，无法更新课表配置'}), 403
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+
+        organization = db.organizations.get_by_id(org_id)
+        if not organization:
+            return jsonify({'error': 'Organization not found'}), 404
+
+        db.organizations.save_schedule_config(org_id, data)
+
+        # 通过WebSocket推送课表更新到组织内所有设备
+        try:
+            import websocket_service
+            if websocket_service.ws_service:
+                websocket_service.ws_service.push_schedule_to_organization(org_id, data)
+        except Exception as e:
+            print(f"[Schedule] 推送课表到组织失败: {e}")
+
+        db.activity_logs.create(
+            account_id=user['id'],
+            account_username=user['username'],
+            action_type='update',
+            action_category='schedule',
+            description=f'用户 {user["username"]} 更新了组织 {organization.get("name", org_id)} 的课表配置',
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
+
+        return jsonify({'message': '课表配置已保存并推送', 'success': True})
+
     return orgs_bp

@@ -75,11 +75,23 @@ class Database:
                     username TEXT UNIQUE NOT NULL,
                     password TEXT NOT NULL,
                     role TEXT NOT NULL,
+                    avatar_url TEXT,
+                    nickname TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     last_login_at TIMESTAMP,
                     is_active BOOLEAN DEFAULT 1
                 )
             ''')
+
+            # 迁移：为已存在的 accounts 表添加 avatar_url 和 nickname 列
+            try:
+                cursor.execute("ALTER TABLE accounts ADD COLUMN avatar_url TEXT")
+            except:
+                pass
+            try:
+                cursor.execute("ALTER TABLE accounts ADD COLUMN nickname TEXT")
+            except:
+                pass
 
             self._migrate_organizations_table(cursor)
 
@@ -89,11 +101,18 @@ class Database:
                     organization_id TEXT NOT NULL,
                     security_config TEXT,
                     network_config TEXT,
+                    schedule_config TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (organization_id) REFERENCES organizations(id)
                 )
             ''')
+
+            # 迁移：为已存在的 organization_configs 表添加 schedule_config 列
+            try:
+                cursor.execute("ALTER TABLE organization_configs ADD COLUMN schedule_config TEXT")
+            except:
+                pass  # 列已存在则忽略
 
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS devices (
@@ -124,6 +143,17 @@ class Database:
             self.permissions.init_table()
             self.activity_logs.init_table()
             self.device_software.init_table()
+
+            # 设备级课表配置表（覆盖组织课表）
+            cursor.execute('''
+                CREATE TABLE IF NOT EXISTS device_schedule_configs (
+                    id TEXT PRIMARY KEY,
+                    device_id TEXT NOT NULL UNIQUE,
+                    schedule_config TEXT,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (device_id) REFERENCES devices(id)
+                )
+            ''')
 
             conn.commit()
 

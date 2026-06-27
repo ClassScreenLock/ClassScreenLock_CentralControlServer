@@ -1052,4 +1052,73 @@ onActivated(async () => {
     rgba(255, 255, 255, 0.05) 100%
   );
 }
+
+/* ===== 响应式适配 ===== */
+@media (max-width: 768px) {
+  .system-logs-container {
+    gap: 12px;
+  }
+
+  .logs-header {
+    padding: 14px;
+  }
+
+  .filters {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .filter-group {
+    width: 100%;
+  }
+
+  .search-group {
+    min-width: 100%;
+  }
+
+  .filter-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .batch-actions {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .pagination {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    border-radius: 12px;
+  }
+
+  .modal-glass, .modal-refraction, .modal-content::before {
+    border-radius: 12px;
+  }
+
+  .modal-header {
+    padding: 16px 18px;
+  }
+
+  .modal-body {
+    padding: 16px 18px;
+    max-height: calc(85vh - 70px);
+  }
+
+  .modal-footer {
+    padding: 12px 18px;
+  }
+
+  .detail-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}
 </style>

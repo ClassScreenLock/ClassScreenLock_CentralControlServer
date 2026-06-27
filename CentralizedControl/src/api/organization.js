@@ -12,7 +12,9 @@ export const organizationAPI = {
   updateSecurityConfig: (id, config) => api.put(`/organizations/${id}/security-config`, config),
   getNetworkConfig: (id) => api.get(`/organizations/${id}/network-config`),
   updateNetworkConfig: (id, config) => api.put(`/organizations/${id}/network-config`, config),
-  exportConfig: (id) => api.get(`/organizations/${id}/export-config`)
+  exportConfig: (id) => api.get(`/organizations/${id}/export-config`),
+  getScheduleConfig: (id) => api.get(`/organizations/${id}/schedule-config`),
+  updateScheduleConfig: (id, config) => api.put(`/organizations/${id}/schedule-config`, config)
 }
 
 export const deviceAPI = {
@@ -21,5 +23,8 @@ export const deviceAPI = {
   updateStatus: (id, status) => api.patch(`/devices/${id}/status`, { status }),
   delete: (id) => api.delete(`/devices/${id}`),
   getSoftware: (id, params = {}) => api.get(`/devices/${id}/software`, { params }),
-  refreshSoftware: (id) => api.post(`/devices/${id}/software/refresh`)
+  refreshSoftware: (id) => api.post(`/devices/${id}/software/refresh`),
+  getScheduleConfig: (id) => api.get(`/devices/${id}/schedule-config`),
+  updateScheduleConfig: (id, config) => api.put(`/devices/${id}/schedule-config`, config),
+  deleteScheduleConfig: (id) => api.delete(`/devices/${id}/schedule-config`)
 }

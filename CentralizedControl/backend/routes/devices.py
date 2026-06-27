@@ -383,4 +383,86 @@ def create_devices_routes(db, token_required):
         except Exception as e:
             return jsonify({'error': f'Failed to update software list: {str(e)}'}), 500
 
+    # ========== 设备课表配置 API ==========
+
+    @devices_bp.route('/<path:device_id>/schedule-config', methods=['GET'])
+    def get_device_schedule_config(device_id):
+        """获取设备的课表配置（优先设备专属，回退到组织默认）"""
+        device = db.devices.get_by_id(device_id)
+        if not device:
+            return jsonify({'error': 'Device not found'}), 404
+
+        schedule = db.devices.get_schedule_config(device_id)
+        if schedule:
+            return jsonify(schedule)
+        return jsonify({
+            'weeklyCycleCount': 4,
+            'termStartDate': None,
+            'weeklies': [],
+            '_source': 'default'
+        })
+
+    @devices_bp.route('/<path:device_id>/schedule-config', methods=['PUT'])
+    @token_required
+    def update_device_schedule_config(user, device_id):
+        """设置设备专属课表配置并推送到该设备"""
+        if user['role'] not in ['super_admin', 'admin']:
+            return jsonify({'error': '权限不足，无法更新设备课表'}), 403
+
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Request body is required'}), 400
+
+        device = db.devices.get_by_id(device_id)
+        if not device:
+            return jsonify({'error': 'Device not found'}), 404
+
+        db.devices.save_schedule_config(device_id, data)
+
+        # 通过WebSocket推送课表到该设备
+        try:
+            import websocket_service
+            if websocket_service.ws_service:
+                websocket_service.ws_service.push_schedule_to_device(device_id, data)
+        except Exception as e:
+            print(f"[Schedule] 推送课表到设备失败: {e}")
+
+        db.activity_logs.create(
+            account_id=user['id'],
+            account_username=user['username'],
+            action_type='update',
+            action_category='schedule',
+            description=f'用户 {user["username"]} 更新了设备 {device.get("name", device_id)} 的课表配置',
+            ip_address=request.remote_addr,
+            user_agent=request.headers.get('User-Agent')
+        )
+
+        return jsonify({'message': '设备课表配置已保存并推送', 'success': True})
+
+    @devices_bp.route('/<path:device_id>/schedule-config', methods=['DELETE'])
+    @token_required
+    def delete_device_schedule_config(user, device_id):
+        """删除设备专属课表配置（恢复使用组织默认）"""
+        if user['role'] not in ['super_admin', 'admin']:
+            return jsonify({'error': '权限不足'}), 403
+
+        device = db.devices.get_by_id(device_id)
+        if not device:
+            return jsonify({'error': 'Device not found'}), 404
+
+        db.devices.delete_schedule_config(device_id)
+
+        # 推送组织默认课表到设备
+        try:
+            if device.get('organization_id'):
+                org_schedule = db.organizations.get_schedule_config(device['organization_id'])
+                if org_schedule:
+                    import websocket_service
+                    if websocket_service.ws_service:
+                        websocket_service.ws_service.push_schedule_to_device(device_id, org_schedule)
+        except Exception as e:
+            print(f"[Schedule] 推送回退课表失败: {e}")
+
+        return jsonify({'message': '设备课表配置已删除，恢复使用组织默认', 'success': True})
+
     return devices_bp

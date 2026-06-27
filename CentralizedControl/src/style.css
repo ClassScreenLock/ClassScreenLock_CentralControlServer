@@ -185,3 +185,78 @@ h1, h2, h3, h4, h5, h6, p, span, div, label, input, textarea, select, button, a,
   outline: 2px solid var(--fui-primary);
   border-color: transparent;
 }
+
+/* ===== 全局响应式适配 ===== */
+
+/* 移动端基础优化 */
+@media (max-width: 768px) {
+  body {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* 响应式表格 - 水平滚动 */
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    white-space: nowrap;
+  }
+
+  thead, tbody, tr, th, td {
+    white-space: nowrap;
+  }
+
+  th, td {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+
+  /* 触控友好的按钮尺寸 */
+  button, .btn, .button-primary, .toolbar-btn {
+    min-height: 36px;
+  }
+
+  /* 响应式容器 */
+  .fluent-container {
+    padding: 12px;
+  }
+
+  .card {
+    padding: 14px;
+    margin-bottom: 12px;
+  }
+
+  /* 输入框优化 */
+  .input-field {
+    font-size: 16px; /* 防止 iOS 缩放 */
+    padding: 10px 12px;
+  }
+
+  /* 模态框全局适配 */
+  .modal-overlay {
+    padding: 10px;
+  }
+
+  .modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0;
+  }
+}
+
+/* 平板端优化 */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .fluent-container {
+    padding: 16px;
+  }
+
+  .card {
+    padding: 16px;
+  }
+
+  th, td {
+    padding: 10px 14px;
+    font-size: 13px;
+  }
+}

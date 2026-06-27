@@ -497,4 +497,66 @@ onMounted(() => {
 .btn-secondary:hover {
   background: var(--border-color);
 }
+
+/* ===== 响应式适配 ===== */
+@media (max-width: 768px) {
+  .settings {
+    padding: 12px;
+  }
+
+  .settings-container {
+    max-width: 100%;
+  }
+
+  .settings-card {
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+
+  .setting-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 0;
+  }
+
+  .setting-control {
+    width: 100%;
+  }
+
+  .theme-toggle {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .font-size-control {
+    flex-wrap: wrap;
+  }
+
+  .font-size-btn {
+    padding: 8px 14px;
+    font-size: 12px;
+    min-width: 60px;
+    flex: 1;
+  }
+
+  .info-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+
+  .info-card-content {
+    padding: 8px 16px;
+  }
+
+  .section-title {
+    font-size: 1.1em;
+  }
+
+  .btn-primary, .btn-secondary {
+    padding: 10px 20px;
+    font-size: 13px;
+  }
+}
 </style>

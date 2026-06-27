@@ -2,7 +2,7 @@
   <div class="organizations-page">
     <div class="page-header">
       <h2>组织管理</h2>
-      <button class="button-primary" @click="openAddModal">添加组织</button>
+      <button v-if="hasActionPermission('org', 'create')" class="button-primary" @click="openAddModal">添加组织</button>
     </div>
 
     <div class="organizations-list card">
@@ -14,7 +14,7 @@
           <div class="org-header">
             <h3>{{ org.name }}</h3>
             <div class="org-actions">
-              <button class="button-primary" @click="editOrganization(org)">编辑</button>
+              <button v-if="hasActionPermission('org', 'edit')" class="button-primary" @click="editOrganization(org)">编辑</button>
               <button class="button-primary" @click="viewDevices(org)">查看设备</button>
               <button class="button-primary" @click="exportConfig(org)">导出配置</button>
             </div>
@@ -26,7 +26,7 @@
             <p><strong>设备数量:</strong> {{ org.deviceCount || 0 }}</p>
           </div>
           <div class="org-footer">
-            <button class="button-primary" @click="showDeleteConfirm(org)">删除</button>
+            <button v-if="hasActionPermission('org', 'delete')" class="button-primary" @click="showDeleteConfirm(org)">删除</button>
           </div>
         </div>
       </div>
@@ -95,7 +95,9 @@ import { useRouter } from 'vue-router'
 import { organizationAPI } from '@/api/organization'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { notify } from '@/utils/notification'
+import { usePermissions } from '@/composables/usePermissions'
 
+const { hasActionPermission } = usePermissions()
 const router = useRouter()
 const organizations = ref([])
 const showModal = ref(false)
@@ -687,5 +689,73 @@ textarea.input-field {
 
 [data-theme='dark'] .button-secondary:hover {
   background: rgba(80, 80, 80, 0.6);
+}
+
+/* ===== 响应式适配 ===== */
+@media (max-width: 768px) {
+  .organizations-page {
+    gap: 16px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .page-header h2 {
+    font-size: 1.1em;
+  }
+
+  .organization-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .organization-card {
+    padding: 14px;
+  }
+
+  .org-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .org-actions {
+    flex-wrap: wrap;
+  }
+
+  .organizations-list {
+    padding: 16px;
+  }
+
+  .modal-content {
+    width: 95%;
+    max-width: 95%;
+    max-height: 90vh;
+    border-radius: 12px;
+  }
+
+  .modal-glass, .modal-refraction, .modal-content::before {
+    border-radius: 12px;
+  }
+
+  .modal-header {
+    padding: 16px 18px;
+  }
+
+  .modal-body {
+    padding: 18px;
+  }
+
+  .modal-footer {
+    padding: 0 18px 18px;
+    gap: 10px;
+  }
+
+  .form-actions .button-primary {
+    width: auto;
+    flex: 1;
+  }
 }
 </style>

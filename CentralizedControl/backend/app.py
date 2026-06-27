@@ -12,6 +12,7 @@ from routes.devices import create_devices_routes
 from routes.permissions import create_permissions_routes
 from routes.activity_logs import create_activity_log_routes
 from websocket_service import WebSocketService
+import websocket_service
 import os
 import time
 
@@ -49,6 +50,7 @@ app.register_blueprint(activity_logs_routes)
 
 # WebSocket服务（主要实时通信，包含心跳检测）
 ws_service = WebSocketService(app, db, config)
+websocket_service.ws_service = ws_service  # 设置模块级引用，供路由文件导入使用
 
 
 @app.route('/api/health', methods=['GET'])

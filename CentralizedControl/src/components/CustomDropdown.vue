@@ -57,7 +57,7 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['update:modelValue'])
+const emit = defineEmits(['update:modelValue', 'change'])
 
 const isOpen = ref(false)
 const dropdownRef = ref(null)
@@ -104,6 +104,7 @@ const toggleDropdown = () => {
 const selectOption = (option) => {
   if (props.disabled) return
   emit('update:modelValue', option.value)
+  emit('change', option.value)
   isOpen.value = false
 }
 

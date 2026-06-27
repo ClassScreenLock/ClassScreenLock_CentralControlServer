@@ -1580,4 +1580,76 @@ input[type="checkbox"] {
   background: var(--fui-background-hover);
   color: var(--fui-text);
 }
+
+/* ===== 响应式适配 ===== */
+@media (max-width: 768px) {
+  .security-config-page {
+    gap: 16px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .page-header h2 {
+    font-size: 1.1em;
+  }
+
+  .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .config-container {
+    padding: 14px;
+    min-height: auto;
+  }
+
+  .config-section {
+    padding: 14px;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .editor-tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab-button {
+    font-size: 0.9em;
+    padding: 6px 12px;
+  }
+
+  .dialog {
+    max-width: 95%;
+    border-radius: 12px;
+  }
+
+  .dialog-glass, .dialog-refraction, .dialog::before {
+    border-radius: 12px;
+  }
+
+  .dialog-header {
+    padding: 16px 18px;
+  }
+
+  .dialog-content {
+    padding: 16px;
+  }
+
+  .dialog-footer {
+    padding: 0 18px 18px;
+  }
+
+  .permission-item {
+    flex-direction: column;
+    gap: 10px;
+    align-items: flex-start;
+  }
+}
 </style>

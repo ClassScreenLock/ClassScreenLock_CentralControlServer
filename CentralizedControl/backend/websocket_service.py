@@ -281,6 +281,38 @@ class WebSocketService:
                 'config': config,
                 'timestamp': datetime.now().isoformat()
             })
+
+        @self.socketio.on('request_schedule_sync')
+        def handle_request_schedule_sync(data):
+            """被控端请求课表同步"""
+            device_id = data.get('deviceId')
+            organization_id = data.get('organizationId')
+
+            if not device_id:
+                return
+
+            # 优先获取设备专属课表，回退到组织课表
+            schedule = self.db.devices.get_schedule_config(device_id)
+            if not schedule and organization_id:
+                schedule = self.db.organizations.get_schedule_config(organization_id)
+
+            if schedule:
+                emit('schedule_update', {
+                    'deviceId': device_id,
+                    'schedule': schedule,
+                    'timestamp': datetime.now().isoformat()
+                })
+                print(f"[WebSocket] 课表同步响应已发送到设备 {device_id}")
+            else:
+                emit('schedule_update', {
+                    'deviceId': device_id,
+                    'schedule': {
+                        'weeklyCycleCount': 4,
+                        'termStartDate': None,
+                        'weeklies': []
+                    },
+                    'timestamp': datetime.now().isoformat()
+                })
         
         @self.socketio.on('request_device_list')
         def handle_request_device_list(data):
@@ -387,7 +419,477 @@ class WebSocketService:
                 'message': '消息已发送' if ok else '设备WebSocket未连接，无法推送消息（设备可能仅通过HTTP心跳在线）',
                 'timestamp': datetime.now().isoformat()
             })
-    
+
+        @self.socketio.on('screen_monitor_frame')
+        def handle_screen_monitor_frame(*args):
+            """被控端推送的屏幕帧（实时画面数据）。
+
+            C# 客户端发送格式（按位置）: [deviceId, timestampMs, format, width, height, base64Data]
+            也支持对象格式: {deviceId, timestamp, format, width, height, data}
+            """
+            try:
+                device_id = None
+                timestamp_ms = 0
+                fmt = 'jpeg'
+                width = 0
+                height = 0
+                data = None
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    device_id = payload.get('deviceId') or payload.get('device_id')
+                    timestamp_ms = int(payload.get('timestamp', 0) or 0)
+                    fmt = payload.get('format', 'jpeg') or 'jpeg'
+                    width = int(payload.get('width', 0) or 0)
+                    height = int(payload.get('height', 0) or 0)
+                    data = payload.get('data') or payload.get('base64')
+                elif len(args) >= 6:
+                    device_id = args[0]
+                    timestamp_ms = int(args[1] or 0)
+                    fmt = args[2] or 'jpeg'
+                    try:
+                        width = int(args[3] or 0)
+                    except (TypeError, ValueError):
+                        width = 0
+                    try:
+                        height = int(args[4] or 0)
+                    except (TypeError, ValueError):
+                        height = 0
+                    data = args[5]
+                else:
+                    return
+
+                if not device_id or not data:
+                    return
+
+                # 限制单帧大小（base64 解码后最大 ~16MB），超过则丢弃
+                if isinstance(data, str) and len(data) > 16 * 1024 * 1024:
+                    print(f"[WebSocket] 屏幕帧过大，已丢弃 device={device_id} size={len(data)}")
+                    return
+
+                # 增强：补充设备名/IP
+                device_name = None
+                ip_address = None
+                try:
+                    dev = self.db.devices.get_by_id(device_id)
+                    if dev:
+                        device_name = dev.get('name') or dev.get('device_name')
+                        ip_address = dev.get('ip_address')
+                except Exception:
+                    pass
+
+                frame_payload = {
+                    'deviceId': device_id,
+                    'deviceName': device_name or device_id,
+                    'ipAddress': ip_address,
+                    'timestamp': timestamp_ms,
+                    'format': fmt,
+                    'width': width,
+                    'height': height,
+                    'data': data
+                }
+
+                # 转发到所有已认证的前端
+                self.socketio.emit('screen_monitor_frame', frame_payload, room='frontend')
+                # 每 50 帧打印一次日志（避免刷屏）
+                if not hasattr(handle_screen_monitor_frame, '_frame_count'):
+                    handle_screen_monitor_frame._frame_count = 0
+                handle_screen_monitor_frame._frame_count += 1
+                if handle_screen_monitor_frame._frame_count % 50 == 1:
+                    print(f"[WebSocket] 已转发 {handle_screen_monitor_frame._frame_count} 帧 | device={device_id} {width}x{height} size={len(str(data)) if data else 0}")
+            except Exception as e:
+                print(f"[WebSocket] 处理 screen_monitor_frame 失败: {e}")
+
+        @self.socketio.on('screen_monitor_status')
+        def handle_screen_monitor_status(*args):
+            """被控端推送的屏幕监控状态变化。
+
+            C# 客户端发送格式（按位置）: [deviceId, isStreaming, error]
+            或对象格式: {deviceId, isStreaming, error}
+            """
+            try:
+                device_id = None
+                is_streaming = False
+                error = None
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    device_id = payload.get('deviceId') or payload.get('device_id')
+                    is_streaming = bool(payload.get('isStreaming', False))
+                    error = payload.get('error') or None
+                elif len(args) >= 2:
+                    device_id = args[0]
+                    is_streaming = bool(args[1])
+                    error = args[2] if len(args) > 2 and args[2] else None
+                else:
+                    return
+
+                if not device_id:
+                    return
+
+                status_payload = {
+                    'deviceId': device_id,
+                    'isStreaming': is_streaming,
+                    'error': error or '',
+                    'timestamp': datetime.now().isoformat()
+                }
+
+                self.socketio.emit('screen_monitor_status', status_payload, room='frontend')
+            except Exception as e:
+                print(f"[WebSocket] 处理 screen_monitor_status 失败: {e}")
+
+        @self.socketio.on('screen_monitor_start')
+        def handle_screen_monitor_start(*args):
+            """集控端 → 指定被控端：发起屏幕监控。
+
+            客户端发送格式（按位置）: [sourceDeviceId, targetDeviceId, fps, jpegQuality, maxWidth, monitorIndex]
+            或对象格式: {sourceDeviceId, targetDeviceId, fps, jpegQuality, maxWidth, monitorIndex}
+            """
+            try:
+                source_id = None
+                target_id = None
+                fps = 10
+                jpeg_quality = 60
+                max_width = 1280
+                monitor_index = 0
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    source_id = payload.get('sourceDeviceId') or payload.get('sourceId') or payload.get('userId')
+                    target_id = payload.get('targetDeviceId') or payload.get('deviceId') or payload.get('targetId')
+                    fps = int(payload.get('fps', 10) or 10)
+                    jpeg_quality = int(payload.get('jpegQuality', 60) or 60)
+                    max_width = int(payload.get('maxWidth', 1280) or 1280)
+                    monitor_index = int(payload.get('monitorIndex', 0) or 0)
+                elif len(args) >= 6:
+                    source_id = args[0]
+                    target_id = args[1]
+                    try:
+                        fps = int(args[2] or 10)
+                        jpeg_quality = int(args[3] or 60)
+                        max_width = int(args[4] or 1280)
+                        monitor_index = int(args[5] or 0)
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    emit('screen_monitor_start_ack', {'success': False, 'message': '无效的请求参数'})
+                    return
+
+                if not target_id:
+                    emit('screen_monitor_start_ack', {'success': False, 'message': '缺少目标设备ID'})
+                    return
+
+                fps = max(1, min(30, fps))
+                jpeg_quality = max(1, min(100, jpeg_quality))
+                max_width = max(0, min(7680, max_width))
+                monitor_index = max(0, monitor_index)
+
+                # 转发到目标设备的房间
+                if target_id not in self.device_connections:
+                    emit('screen_monitor_start_ack', {
+                        'success': False,
+                        'deviceId': target_id,
+                        'message': '目标设备未连接到WebSocket'
+                    })
+                    return
+
+                # C# 客户端按位置接收: [fps, jpegQuality, maxWidth, monitorIndex]
+                self.socketio.emit('screen_monitor_start', {
+                    'fps': fps,
+                    'jpegQuality': jpeg_quality,
+                    'maxWidth': max_width,
+                    'monitorIndex': monitor_index
+                }, room=f'device_{target_id}')
+
+                emit('screen_monitor_start_ack', {
+                    'success': True,
+                    'deviceId': target_id,
+                    'fps': fps,
+                    'jpegQuality': jpeg_quality,
+                    'maxWidth': max_width,
+                    'monitorIndex': monitor_index,
+                    'timestamp': datetime.now().isoformat()
+                })
+
+                print(f"[WebSocket] 集控端 {source_id} 向 {target_id} 发起屏幕监控: "
+                      f"fps={fps}, q={jpeg_quality}, w={max_width}, m={monitor_index}")
+            except Exception as e:
+                print(f"[WebSocket] 处理 screen_monitor_start 失败: {e}")
+                emit('screen_monitor_start_ack', {'success': False, 'message': str(e)})
+
+        @self.socketio.on('screen_monitor_stop')
+        def handle_screen_monitor_stop(*args):
+            """集控端 → 指定被控端：停止屏幕监控。"""
+            try:
+                source_id = None
+                target_id = None
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    source_id = payload.get('sourceDeviceId') or payload.get('sourceId') or payload.get('userId')
+                    target_id = payload.get('targetDeviceId') or payload.get('deviceId') or payload.get('targetId')
+                elif len(args) >= 2:
+                    source_id = args[0]
+                    target_id = args[1]
+                else:
+                    emit('screen_monitor_stop_ack', {'success': False, 'message': '无效的请求参数'})
+                    return
+
+                if not target_id:
+                    emit('screen_monitor_stop_ack', {'success': False, 'message': '缺少目标设备ID'})
+                    return
+
+                if target_id not in self.device_connections:
+                    emit('screen_monitor_stop_ack', {
+                        'success': False,
+                        'deviceId': target_id,
+                        'message': '目标设备未连接到WebSocket'
+                    })
+                    return
+
+                self.socketio.emit('screen_monitor_stop', {}, room=f'device_{target_id}')
+
+                emit('screen_monitor_stop_ack', {
+                    'success': True,
+                    'deviceId': target_id,
+                    'timestamp': datetime.now().isoformat()
+                })
+
+                print(f"[WebSocket] 集控端 {source_id} 通知 {target_id} 停止屏幕监控")
+            except Exception as e:
+                print(f"[WebSocket] 处理 screen_monitor_stop 失败: {e}")
+                emit('screen_monitor_stop_ack', {'success': False, 'message': str(e)})
+
+        @self.socketio.on('screen_monitor_settings')
+        def handle_screen_monitor_settings(*args):
+            """集控端 → 指定被控端：动态调整参数（不中断流）。"""
+            try:
+                source_id = None
+                target_id = None
+                fps = 10
+                jpeg_quality = 60
+                max_width = 1280
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    source_id = payload.get('sourceDeviceId') or payload.get('sourceId') or payload.get('userId')
+                    target_id = payload.get('targetDeviceId') or payload.get('deviceId') or payload.get('targetId')
+                    fps = int(payload.get('fps', 10) or 10)
+                    jpeg_quality = int(payload.get('jpegQuality', 60) or 60)
+                    max_width = int(payload.get('maxWidth', 1280) or 1280)
+                elif len(args) >= 5:
+                    source_id = args[0]
+                    target_id = args[1]
+                    try:
+                        fps = int(args[2] or 10)
+                        jpeg_quality = int(args[3] or 60)
+                        max_width = int(args[4] or 1280)
+                    except (TypeError, ValueError):
+                        pass
+                else:
+                    emit('screen_monitor_settings_ack', {'success': False, 'message': '无效的请求参数'})
+                    return
+
+                if not target_id:
+                    emit('screen_monitor_settings_ack', {'success': False, 'message': '缺少目标设备ID'})
+                    return
+
+                fps = max(1, min(30, fps))
+                jpeg_quality = max(1, min(100, jpeg_quality))
+                max_width = max(0, min(7680, max_width))
+
+                if target_id not in self.device_connections:
+                    emit('screen_monitor_settings_ack', {
+                        'success': False,
+                        'deviceId': target_id,
+                        'message': '目标设备未连接到WebSocket'
+                    })
+                    return
+
+                self.socketio.emit('screen_monitor_settings', {
+                    'fps': fps,
+                    'jpegQuality': jpeg_quality,
+                    'maxWidth': max_width
+                }, room=f'device_{target_id}')
+
+                emit('screen_monitor_settings_ack', {
+                    'success': True,
+                    'deviceId': target_id,
+                    'fps': fps,
+                    'jpegQuality': jpeg_quality,
+                    'maxWidth': max_width,
+                    'timestamp': datetime.now().isoformat()
+                })
+
+                print(f"[WebSocket] 集控端 {source_id} 向 {target_id} 推送屏幕参数: "
+                      f"fps={fps}, q={jpeg_quality}, w={max_width}")
+            except Exception as e:
+                print(f"[WebSocket] 处理 screen_monitor_settings 失败: {e}")
+                emit('screen_monitor_settings_ack', {'success': False, 'message': str(e)})
+
+        @self.socketio.on('screen_monitor_settings_applied')
+        def handle_screen_monitor_settings_applied(*args):
+            """被控端确认参数已实际生效 → 转发给集控端前端。"""
+            try:
+                device_id = None
+                fps = 10
+                jpeg_quality = 60
+                max_width = 1280
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    device_id = payload.get('deviceId') or payload.get('device_id')
+                    fps = int(payload.get('fps', 10) or 10)
+                    jpeg_quality = int(payload.get('jpegQuality', 60) or 60)
+                    max_width = int(payload.get('maxWidth', 1280) or 1280)
+                elif len(args) >= 4:
+                    device_id = args[0]
+                    fps = int(args[1] or 10)
+                    jpeg_quality = int(args[2] or 60)
+                    max_width = int(args[3] or 1280)
+
+                if not device_id:
+                    return
+
+                self.socketio.emit('screen_monitor_settings_applied', {
+                    'success': True,
+                    'deviceId': device_id,
+                    'fps': fps,
+                    'jpegQuality': jpeg_quality,
+                    'maxWidth': max_width,
+                    'timestamp': datetime.now().isoformat()
+                }, room='frontend')
+            except Exception as e:
+                print(f"[WebSocket] 处理 screen_monitor_settings_applied 失败: {e}")
+
+        @self.socketio.on('remote_lock')
+        def handle_remote_lock(*args):
+            """集控端 → 指定被控端：远程锁屏。"""
+            try:
+                source_id = None
+                target_id = None
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    source_id = payload.get('sourceDeviceId') or payload.get('sourceId')
+                    target_id = payload.get('targetDeviceId') or payload.get('deviceId') or payload.get('targetId')
+                elif len(args) >= 2:
+                    source_id = args[0]
+                    target_id = args[1]
+
+                if not target_id:
+                    emit('remote_lock_ack', {'success': False, 'message': '缺少目标设备ID'})
+                    return
+
+                if target_id not in self.device_connections:
+                    emit('remote_lock_ack', {'success': False, 'deviceId': target_id, 'message': '目标设备未连接'})
+                    return
+
+                self.socketio.emit('remote_lock', {}, room=f'device_{target_id}')
+                emit('remote_lock_ack', {'success': True, 'deviceId': target_id, 'timestamp': datetime.now().isoformat()})
+                print(f"[WebSocket] 集控端 {source_id} 向 {target_id} 发送远程锁屏")
+            except Exception as e:
+                print(f"[WebSocket] 处理 remote_lock 失败: {e}")
+                emit('remote_lock_ack', {'success': False, 'message': str(e)})
+
+        @self.socketio.on('remote_unlock')
+        def handle_remote_unlock(*args):
+            """集控端 → 指定被控端：远程解锁。"""
+            try:
+                source_id = None
+                target_id = None
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    source_id = payload.get('sourceDeviceId') or payload.get('sourceId')
+                    target_id = payload.get('targetDeviceId') or payload.get('deviceId') or payload.get('targetId')
+                elif len(args) >= 2:
+                    source_id = args[0]
+                    target_id = args[1]
+
+                if not target_id:
+                    emit('remote_unlock_ack', {'success': False, 'message': '缺少目标设备ID'})
+                    return
+
+                if target_id not in self.device_connections:
+                    emit('remote_unlock_ack', {'success': False, 'deviceId': target_id, 'message': '目标设备未连接'})
+                    return
+
+                self.socketio.emit('remote_unlock', {}, room=f'device_{target_id}')
+                emit('remote_unlock_ack', {'success': True, 'deviceId': target_id, 'timestamp': datetime.now().isoformat()})
+                print(f"[WebSocket] 集控端 {source_id} 向 {target_id} 发送远程解锁")
+            except Exception as e:
+                print(f"[WebSocket] 处理 remote_unlock 失败: {e}")
+                emit('remote_unlock_ack', {'success': False, 'message': str(e)})
+
+        @self.socketio.on('push_schedule_to_org')
+        def handle_push_schedule_to_org(*args):
+            """前端推送课表到组织内所有设备"""
+            try:
+                if len(args) == 1 and isinstance(args[0], dict):
+                    data = args[0]
+                    org_id = data.get('organizationId')
+                    schedule = data.get('schedule')
+                else:
+                    return
+
+                if not org_id or not schedule:
+                    emit('error', {'message': '缺少组织ID或课表数据'})
+                    return
+
+                self.push_schedule_to_organization(org_id, schedule)
+                emit('schedule_push_ack', {'success': True, 'organizationId': org_id, 'timestamp': datetime.now().isoformat()})
+                print(f"[WebSocket] 前端推送课表到组织 {org_id}")
+            except Exception as e:
+                print(f"[WebSocket] push_schedule_to_org 失败: {e}")
+
+        @self.socketio.on('push_schedule_to_device')
+        def handle_push_schedule_to_device(*args):
+            """前端推送课表到单个设备"""
+            try:
+                if len(args) == 1 and isinstance(args[0], dict):
+                    data = args[0]
+                    device_id = data.get('deviceId')
+                    schedule = data.get('schedule')
+                else:
+                    return
+
+                if not device_id or not schedule:
+                    emit('error', {'message': '缺少设备ID或课表数据'})
+                    return
+
+                self.push_schedule_to_device(device_id, schedule)
+                emit('schedule_push_ack', {'success': True, 'deviceId': device_id, 'timestamp': datetime.now().isoformat()})
+                print(f"[WebSocket] 前端推送课表到设备 {device_id}")
+            except Exception as e:
+                print(f"[WebSocket] push_schedule_to_device 失败: {e}")
+
+        @self.socketio.on('lock_state')
+        def handle_lock_state(*args):
+            """被控端推送锁屏状态变化 → 转发给前端。"""
+            try:
+                device_id = None
+                is_locked = False
+
+                if len(args) == 1 and isinstance(args[0], dict):
+                    payload = args[0]
+                    device_id = payload.get('deviceId') or payload.get('device_id')
+                    is_locked = bool(payload.get('isLocked', False))
+                elif len(args) >= 2:
+                    device_id = args[0]
+                    is_locked = bool(args[1])
+
+                if not device_id:
+                    return
+
+                self.socketio.emit('lock_state', {
+                    'deviceId': device_id,
+                    'isLocked': is_locked,
+                    'timestamp': datetime.now().isoformat()
+                }, room='frontend')
+            except Exception as e:
+                print(f"[WebSocket] 处理 lock_state 失败: {e}")
+
     def _verify_token(self, token):
         """验证JWT token"""
         try:
@@ -516,6 +1018,29 @@ class WebSocketService:
             self.socketio.emit('notification', message, room=room)
         else:
             self.socketio.emit('notification', message)
+
+    def push_schedule_to_device(self, device_id, schedule_config):
+        """推送课表配置到指定设备"""
+        if device_id in self.device_connections:
+            self.socketio.emit('schedule_update', {
+                'deviceId': device_id,
+                'schedule': schedule_config,
+                'timestamp': datetime.now().isoformat()
+            }, room=f'device_{device_id}')
+            print(f"[WebSocket] 课表已推送到设备 {device_id}")
+            return True
+        print(f"[WebSocket] 推送课表失败：设备 {device_id} 未连接")
+        return False
+
+    def push_schedule_to_organization(self, organization_id, schedule_config):
+        """推送课表配置到组织内所有设备"""
+        self.socketio.emit('schedule_update', {
+            'organizationId': organization_id,
+            'schedule': schedule_config,
+            'timestamp': datetime.now().isoformat()
+        }, room=f'org_{organization_id}')
+        print(f"[WebSocket] 课表已推送到组织 {organization_id}")
+        return True
     
     def _start_background_tasks(self):
         """启动后台任务"""
@@ -573,3 +1098,7 @@ class WebSocketService:
     def get_socketio(self):
         """获取SocketIO实例"""
         return self.socketio
+
+
+# 模块级实例引用，由 app.py 在创建 WebSocketService 后赋值
+ws_service = None  # type: WebSocketService|None

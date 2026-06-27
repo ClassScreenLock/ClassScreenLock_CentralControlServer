@@ -64,6 +64,12 @@
               </th>
               <th>
                 <div class="th-content">
+                  <FluentIcons name="lock" :size="18" class="th-icon" />
+                  锁屏
+                </div>
+              </th>
+              <th>
+                <div class="th-content">
                   <FluentIcons name="clock" :size="18" class="th-icon" />
                   最后在线
                 </div>
@@ -78,38 +84,54 @@
           </thead>
           <tbody>
             <tr v-for="device in filteredDevices" :key="device.id">
-              <td>
+              <td data-label="设备名称">
                 <div class="device-name">
                   <FluentIcons name="computer" :size="18" class="device-icon" />
                   {{ device.name }}
                 </div>
               </td>
-              <td>{{ device.ipAddress }}</td>
-              <td>
+              <td data-label="IP 地址">{{ device.ipAddress }}</td>
+              <td data-label="所属组织">
                 <div class="org-name">
                   <FluentIcons name="building" :size="16" class="org-icon" />
                   {{ getOrganizationName(device.organizationId) }}
                 </div>
               </td>
-              <td>
+              <td data-label="状态">
                 <div class="status-badge" :class="device.status">
                   <span class="status-dot" :class="device.status"></span>
                   {{ formatStatus(device.status) }}
                 </div>
               </td>
-              <td class="time-cell">{{ device.status === 'online' ? '刚刚' : formatDate(device.lastHeartbeat || device.lastSeen, true) }}</td>
-              <td>
+              <td data-label="锁屏">
+                <span class="lock-badge" :class="device.isLocked ? 'locked' : 'unlocked'">
+                  <FluentIcons name="lock" :size="12" />
+                  {{ device.isLocked ? '已锁' : '未锁' }}
+                </span>
+              </td>
+              <td data-label="最后在线" class="time-cell">{{ device.status === 'online' ? '刚刚' : formatDate(device.lastHeartbeat || device.lastSeen, true) }}</td>
+              <td data-label="操作">
                 <div class="action-buttons">
                   <button class="button-icon" @click="viewDevice(device)" title="查看详情" :disabled="!devicePermissions.viewDetail">
                     <FluentIcons name="view" :size="18" />
                   </button>
                   <button
+                    v-if="canSendMsg"
                     class="button-icon message-btn"
                     @click="openSendMessageModal(device)"
                     title="发送消息"
                     :disabled="device.status !== 'online'"
                   >
                     <FluentIcons name="message" :size="18" />
+                  </button>
+                  <button
+                    v-if="canRemoteLock"
+                    class="button-icon lock-btn"
+                    @click="toggleDeviceLock(device)"
+                    :title="device.isLocked ? '远程解锁' : '远程锁屏'"
+                    :disabled="device.status !== 'online'"
+                  >
+                    <FluentIcons :name="device.isLocked ? 'unlock' : 'lock'" :size="18" />
                   </button>
                   <button class="button-icon delete-btn" @click="showDeleteConfirm(device)" title="删除设备" :disabled="!devicePermissions.delete">
                     <FluentIcons name="delete" :size="18" />
@@ -497,6 +519,12 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { notify } from '@/utils/notification'
 import { getPermissions } from '@/stores/permissions'
 import wsService from '@/utils/websocket'
+import { usePermissions } from '@/composables/usePermissions'
+
+const { hasActionPermission } = usePermissions()
+
+const canSendMsg = computed(() => hasActionPermission('device', 'sendMessage'))
+const canRemoteLock = computed(() => hasActionPermission('device', 'remoteLock'))
 
 const route = useRoute()
 const devices = ref([])
@@ -666,7 +694,12 @@ const orgOptions = computed(() => [
 const loadDevices = async () => {
   try {
     const data = await deviceAPI.getAll()
-    devices.value = Array.isArray(data) ? data : []
+    const list = Array.isArray(data) ? data : []
+    // 保留已有 isLocked 状态
+    devices.value = list.map(d => {
+      const ex = devices.value.find(x => x.id === d.id)
+      return { ...d, isLocked: ex?.isLocked ?? false }
+    })
   } catch (error) {
     console.error('Failed to load devices:', error)
     devices.value = []
@@ -866,6 +899,27 @@ const confirmSendMessage = () => {
   }, 10000)
 }
 
+// ===== 远程锁屏 =====
+const toggleDeviceLock = (device) => {
+  if (device.status !== 'online') {
+    notify.warning('设备不在线，无法操作')
+    return
+  }
+  if (!!device.isLocked) {
+    wsService.remoteUnlock(device.id)
+  } else {
+    wsService.remoteLock(device.id)
+  }
+}
+
+const onLockState = (data) => {
+  if (!data || !data.deviceId) return
+  const device = devices.value.find(d => d.id === data.deviceId)
+  if (device) {
+    device.isLocked = !!data.isLocked
+  }
+}
+
 const formatDate = (date, showSeconds = false) => {
   if (!date) return '从未在线'
   const d = new Date(date)
@@ -899,7 +953,8 @@ onMounted(async () => {
   
   // 订阅 WebSocket 设备状态更新
   wsService.on('onDeviceStatusUpdate', handleDeviceStatusUpdate)
-  
+  wsService.on('onLockState', onLockState)
+
   // 每 1 秒自动刷新设备列表
   refreshTimer = setInterval(() => {
     loadDevices()
@@ -909,7 +964,8 @@ onMounted(async () => {
 onUnmounted(() => {
   // 移除 WebSocket 回调
   wsService.off('onDeviceStatusUpdate', handleDeviceStatusUpdate)
-  
+  wsService.off('onLockState', onLockState)
+
   // 清除定时器
   if (refreshTimer) {
     clearInterval(refreshTimer)
@@ -1263,6 +1319,29 @@ tbody tr:hover {
   color: #6b7280;
   border: 1px solid rgba(156, 163, 175, 0.2);
 }
+
+.lock-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border-radius: 99px;
+  font-size: 0.75em;
+  font-weight: 600;
+}
+.lock-badge.locked {
+  background: rgba(240, 160, 48, 0.12);
+  color: #f0a030;
+  border: 1px solid rgba(240, 160, 48, 0.25);
+}
+.lock-badge.unlocked {
+  background: rgba(76, 175, 80, 0.08);
+  color: #4caf50;
+  border: 1px solid rgba(76, 175, 80, 0.15);
+}
+
+.button-icon.lock-btn { color: #f0a030; }
+.button-icon.lock-btn:hover { background: rgba(240, 160, 48, 0.15); }
 
 .time-cell {
   color: var(--fui-text-secondary);
@@ -1852,9 +1931,73 @@ tbody tr:hover {
     font-size: 1.125em;
   }
 
+  /* 移动端表格 → 卡片布局 */
+  .devices-table table {
+    display: table !important;
+    overflow: visible !important;
+    border: none !important;
+    border-radius: 0 !important;
+  }
+
+  .devices-table thead {
+    display: none;
+  }
+
+  .devices-table tbody tr {
+    display: block;
+    margin-bottom: 12px;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 10px;
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+
+  .devices-table tbody tr:hover {
+    transform: none;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .devices-table tbody td {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+    border: none !important;
+    font-size: 0.85em;
+    text-align: left;
+  }
+
+  .devices-table tbody td::before {
+    content: attr(data-label);
+    flex-shrink: 0;
+    min-width: 72px;
+    font-weight: 600;
+    font-size: 0.78em;
+    color: var(--fui-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+
+  .devices-table tbody td:last-child::before {
+    content: none;
+  }
+
+  .devices-table tbody td:last-child {
+    justify-content: flex-start;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+    margin-top: 6px;
+  }
+
+  .devices-table tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
   .devices-table {
-    overflow-x: scroll;
-    -webkit-overflow-scrolling: touch;
+    overflow-x: visible;
   }
 
   .status-badge {
@@ -1921,14 +2064,13 @@ tbody tr:hover {
     font-size: 0.8125em;
   }
 
-  thead th {
-    font-size: 0.6875em;
-    padding: 8px 10px;
+  .devices-table tbody td {
+    font-size: 0.78em;
   }
 
-  tbody td {
-    font-size: 0.75em;
-    padding: 8px 10px;
+  .devices-table tbody td::before {
+    min-width: 64px;
+    font-size: 0.72em;
   }
 
   .device-name {

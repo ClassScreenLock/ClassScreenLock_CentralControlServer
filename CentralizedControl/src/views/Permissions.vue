@@ -326,6 +326,135 @@
           </table>
         </div>
       </div>
+      <div class="permission-card">
+        <h3>权限管理操作权限</h3>
+        <p class="card-description">设置各角色在权限管理中的具体操作权限（控制admin是否可以修改其他角色的权限）</p>
+        
+        <div class="permission-table">
+          <table>
+            <thead>
+              <tr>
+                <th class="page-col">操作权限</th>
+                <th v-if="showSuperAdminColumn" class="role-col">Super Admin</th>
+                <th v-if="showAdminColumn" class="role-col">Admin</th>
+                <th v-if="showUserColumn" class="role-col">User</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="perm in permissionMgmtPermissions" :key="perm.key">
+                <td class="perm-name">
+                  <FluentIcons :name="perm.icon" :size="16" class="page-icon" />
+                  <div class="perm-info">
+                    <span class="perm-title">{{ perm.title }}</span>
+                    <span class="perm-desc">{{ perm.description }}</span>
+                  </div>
+                </td>
+                <td v-if="showSuperAdminColumn"><FluentToggle checked disabled /></td>
+                <td v-if="showAdminColumn">
+                  <FluentToggle 
+                    :checked="actionPermissions.admin?.permissionMgmt?.[perm.key]"
+                    :disabled="!canEditPermissions"
+                    @update:checked="(value) => toggleActionPermission('admin', 'permissionMgmt', perm.key, value)"
+                  />
+                </td>
+                <td v-if="showUserColumn">
+                  <FluentToggle 
+                    :checked="actionPermissions.user?.permissionMgmt?.[perm.key]"
+                    :disabled="!canEditPermissions"
+                    @update:checked="(value) => toggleActionPermission('user', 'permissionMgmt', perm.key, value)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="permission-card">
+        <h3>课表控制操作权限</h3>
+        <p class="card-description">设置各角色在课表控制中的具体操作权限</p>
+        
+        <div class="permission-table">
+          <table>
+            <thead>
+              <tr>
+                <th class="page-col">操作权限</th>
+                <th v-if="showSuperAdminColumn" class="role-col">Super Admin</th>
+                <th v-if="showAdminColumn" class="role-col">Admin</th>
+                <th v-if="showUserColumn" class="role-col">User</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="perm in schedulePermissions" :key="perm.key">
+                <td class="perm-name">
+                  <FluentIcons :name="perm.icon" :size="16" class="page-icon" />
+                  <div class="perm-info">
+                    <span class="perm-title">{{ perm.title }}</span>
+                    <span class="perm-desc">{{ perm.description }}</span>
+                  </div>
+                </td>
+                <td v-if="showSuperAdminColumn"><FluentToggle checked disabled /></td>
+                <td v-if="showAdminColumn">
+                  <FluentToggle 
+                    :checked="actionPermissions.admin?.schedule?.[perm.key]"
+                    :disabled="!canEditPermissions"
+                    @update:checked="(value) => toggleActionPermission('admin', 'schedule', perm.key, value)"
+                  />
+                </td>
+                <td v-if="showUserColumn">
+                  <FluentToggle 
+                    :checked="actionPermissions.user?.schedule?.[perm.key]"
+                    :disabled="!canEditPermissions"
+                    @update:checked="(value) => toggleActionPermission('user', 'schedule', perm.key, value)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="permission-card">
+        <h3>屏幕监控操作权限</h3>
+        <p class="card-description">设置各角色在屏幕监控中的具体操作权限</p>
+        
+        <div class="permission-table">
+          <table>
+            <thead>
+              <tr>
+                <th class="page-col">操作权限</th>
+                <th v-if="showSuperAdminColumn" class="role-col">Super Admin</th>
+                <th v-if="showAdminColumn" class="role-col">Admin</th>
+                <th v-if="showUserColumn" class="role-col">User</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="perm in screenMonitorPermissions" :key="perm.key">
+                <td class="perm-name">
+                  <FluentIcons :name="perm.icon" :size="16" class="page-icon" />
+                  <div class="perm-info">
+                    <span class="perm-title">{{ perm.title }}</span>
+                    <span class="perm-desc">{{ perm.description }}</span>
+                  </div>
+                </td>
+                <td v-if="showSuperAdminColumn"><FluentToggle checked disabled /></td>
+                <td v-if="showAdminColumn">
+                  <FluentToggle 
+                    :checked="actionPermissions.admin?.screenMonitor?.[perm.key]"
+                    :disabled="!canEditPermissions"
+                    @update:checked="(value) => toggleActionPermission('admin', 'screenMonitor', perm.key, value)"
+                  />
+                </td>
+                <td v-if="showUserColumn">
+                  <FluentToggle 
+                    :checked="actionPermissions.user?.screenMonitor?.[perm.key]"
+                    :disabled="!canEditPermissions"
+                    @update:checked="(value) => toggleActionPermission('user', 'screenMonitor', perm.key, value)"
+                  />
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -362,9 +491,11 @@ const pages = [
   { path: '/dashboard', title: '仪表盘', icon: 'dashboard' },
   { path: '/organizations', title: '组织管理', icon: 'organization' },
   { path: '/devices', title: '设备管理', icon: 'device' },
+  { path: '/screen-monitor', title: '屏幕监控', icon: 'desktop' },
   { path: '/accounts', title: '账户管理', icon: 'person' },
   { path: '/security-config', title: '安全中心配置', icon: 'security' },
   { path: '/network-intercept', title: '网络拦截配置', icon: 'network' },
+  { path: '/schedule-control', title: '课表控制', icon: 'calendar' },
   { path: '/system-logs', title: '系统日志', icon: 'list' },
   { path: '/settings', title: '系统设置', icon: 'settings' },
   { path: '/permissions', title: '权限管理', icon: 'shield' }
@@ -374,9 +505,11 @@ const defaultPagePermissions = {
   '/dashboard': ['super_admin', 'admin', 'user'],
   '/organizations': ['super_admin', 'admin'],
   '/devices': ['super_admin', 'admin'],
+  '/screen-monitor': ['super_admin', 'admin', 'user'],
   '/accounts': ['super_admin', 'admin'],
   '/security-config': ['super_admin', 'admin'],
   '/network-intercept': ['super_admin', 'admin'],
+  '/schedule-control': ['super_admin', 'admin'],
   '/system-logs': ['super_admin', 'admin'],
   '/settings': ['super_admin', 'admin', 'user'],
   '/permissions': ['super_admin']
@@ -391,6 +524,8 @@ const orgPermissions = [
 const devicePermissions = [
   { key: 'viewDetail', title: '查看设备详情', description: '是否可以查看设备的详细信息', icon: 'view' },
   { key: 'viewSoftware', title: '查看已安装软件', description: '是否可以查看设备上安装的软件列表', icon: 'app_folder' },
+  { key: 'sendMessage', title: '发送消息', description: '是否可以向设备发送通知消息', icon: 'message' },
+  { key: 'remoteLock', title: '远程锁屏/解锁', description: '是否可以远程锁定或解锁设备', icon: 'lock' },
   { key: 'delete', title: '删除设备', description: '是否可以删除已注册的设备', icon: 'delete' }
 ]
 
@@ -421,22 +556,46 @@ const systemLogsPermissions = [
   { key: 'clearAll', title: '清空所有日志', description: '是否可以清空所有系统日志记录', icon: 'delete' }
 ]
 
+const permissionMgmtPermissions = [
+  { key: 'modifyLower', title: '修改低等级角色权限', description: '是否可以修改比自己等级低的角色（如 admin 修改 user）的权限', icon: 'shield' },
+  { key: 'modifySame', title: '修改同等级角色权限', description: '是否可以修改与自己同等级的角色（如 admin 修改其他 admin）的权限', icon: 'shield' }
+]
+
+const schedulePermissions = [
+  { key: 'editOrg', title: '编辑组织课表', description: '是否可以修改、添加或删除组织级别的课表安排', icon: 'building' },
+  { key: 'editDevice', title: '编辑单设备课表', description: '是否可以修改、添加或删除单个设备独立的课表安排', icon: 'computer' }
+]
+
+const screenMonitorPermissions = [
+  { key: 'startMonitor', title: '开始监控', description: '是否可以开始对设备的屏幕实时监控推流', icon: 'play' },
+  { key: 'stopMonitor', title: '停止监控', description: '是否可以停止正在进行的屏幕监控', icon: 'stop' },
+  { key: 'remoteLock', title: '远程锁屏/解锁', description: '是否可以对被控设备执行远程锁屏或解锁操作', icon: 'lock' },
+  { key: 'sendMessage', title: '发送消息', description: '是否可以向被控设备发送通知消息', icon: 'message' },
+  { key: 'adjustSettings', title: '调整监控参数', description: '是否可以调整屏幕监控的画质、分辨率、帧率等参数', icon: 'settings' }
+]
+
 const defaultActionPermissions = {
   admin: {
     org: { edit: true, delete: true, create: true },
-    device: { viewDetail: true, delete: true },
+    device: { viewDetail: true, viewSoftware: true, sendMessage: true, remoteLock: true, delete: true },
     account: { create: true, changeRole: true, delete: true },
     security: { manageAccounts: true, jsonEdit: true, enableTwoFactor: true, changeLoginMode: true, modifyPermissions: true },
     network: { enableGlobal: true, manageDomains: true },
-    systemLogs: { view: true, search: true, deleteSingle: true, batchDelete: true, clearAll: true }
+    systemLogs: { view: true, search: true, deleteSingle: true, batchDelete: true, clearAll: true },
+    permissionMgmt: { modifyLower: true, modifySame: true },
+    schedule: { editOrg: true, editDevice: true },
+    screenMonitor: { startMonitor: true, stopMonitor: true, remoteLock: true, sendMessage: true, adjustSettings: true }
   },
   user: {
     org: { edit: false, delete: false, create: false },
-    device: { viewDetail: true, delete: false },
+    device: { viewDetail: true, viewSoftware: false, sendMessage: false, remoteLock: false, delete: false },
     account: { create: false, changeRole: false, delete: false },
     security: { manageAccounts: false, jsonEdit: false, enableTwoFactor: false, changeLoginMode: false, modifyPermissions: false },
     network: { enableGlobal: false, manageDomains: false },
-    systemLogs: { view: false, search: false, deleteSingle: false, batchDelete: false, clearAll: false }
+    systemLogs: { view: false, search: false, deleteSingle: false, batchDelete: false, clearAll: false },
+    permissionMgmt: { modifyLower: false, modifySame: false },
+    schedule: { editOrg: false, editDevice: false },
+    screenMonitor: { startMonitor: false, stopMonitor: false, remoteLock: false, sendMessage: false, adjustSettings: false }
   }
 }
 
@@ -793,5 +952,57 @@ tr:last-child td {
 
 .btn-secondary:hover {
   background: rgba(255, 255, 255, 0.15);
+}
+
+/* ===== 响应式适配 ===== */
+@media (max-width: 768px) {
+  .permission-manager {
+    padding: 12px;
+    min-height: auto;
+  }
+
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px;
+    position: static;
+  }
+
+  .page-title h2 {
+    font-size: 1.1em;
+  }
+
+  .permission-card {
+    padding: 14px;
+  }
+
+  .permission-table {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .page-col {
+    min-width: 180px;
+  }
+
+  .role-col {
+    min-width: 90px;
+  }
+
+  th, td {
+    padding: 8px 10px;
+    font-size: 0.75em;
+  }
+
+  .permission-actions {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .btn-primary, .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
 }
 </style>

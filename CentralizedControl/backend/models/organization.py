@@ -89,19 +89,36 @@ class OrganizationModel:
                 result['security_config'] = json.loads(row['security_config'])
             if row['network_config']:
                 result['network_config'] = json.loads(row['network_config'])
+            if row['schedule_config']:
+                result['schedule_config'] = json.loads(row['schedule_config'])
             return result
 
     def save_config(self, org_id: str, security_config: Dict = None,
-                    network_config: Dict = None) -> bool:
+                    network_config: Dict = None, schedule_config: Dict = None) -> bool:
         security_json = json.dumps(security_config, ensure_ascii=False) if security_config else None
         network_json = json.dumps(network_config, ensure_ascii=False) if network_config else None
+        schedule_json = json.dumps(schedule_config, ensure_ascii=False) if schedule_config else None
 
         with self.db.get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute('''
                 INSERT OR REPLACE INTO organization_configs
-                (id, organization_id, security_config, network_config, updated_at)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (org_id, org_id, security_json, network_json, datetime.now().isoformat()))
+                (id, organization_id, security_config, network_config, schedule_config, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (org_id, org_id, security_json, network_json, schedule_json, datetime.now().isoformat()))
             conn.commit()
             return True
+
+    def get_schedule_config(self, org_id: str) -> Optional[Dict[str, Any]]:
+        """获取组织的课表配置"""
+        config = self.get_config(org_id)
+        if config and config.get('schedule_config'):
+            return config['schedule_config']
+        return None
+
+    def save_schedule_config(self, org_id: str, schedule_config: Dict) -> bool:
+        """仅保存课表配置（保留其他配置不变）"""
+        existing = self.get_config(org_id)
+        security = existing.get('security_config') if existing else None
+        network = existing.get('network_config') if existing else None
+        return self.save_config(org_id, security_config=security, network_config=network, schedule_config=schedule_config)
