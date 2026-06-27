@@ -105,7 +105,7 @@
           <div class="info-card-content">
             <div class="info-item">
               <span class="info-label">系统版本</span>
-              <span class="info-value">1.5.0</span>
+              <span class="info-value">1.6.0</span>
             </div>
             <div class="info-item">
               <span class="info-label">运行时间</span>
