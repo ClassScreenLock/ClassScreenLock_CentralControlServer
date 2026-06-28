@@ -1060,6 +1060,7 @@ class WebSocketService:
                 
                 for device in devices:
                     if not isinstance(device, dict):
+                        time.sleep(10)
                         continue
                         
                     if device.get('status') == 'online':
